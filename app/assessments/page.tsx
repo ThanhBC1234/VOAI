@@ -11,21 +11,9 @@ export const metadata: Metadata = {
     "Retrieval, tự code, bằng chứng, giải thích và rubric cho từng ngày trong lộ trình VOAI 290 phiên.",
 };
 
-type AssessmentsPageProps = {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
-};
+export const dynamic = "force-static";
 
-export default async function AssessmentsPage({ searchParams }: AssessmentsPageProps) {
-  const params = searchParams ? await searchParams : {};
-  const requestedSession = Array.isArray(params.session)
-    ? params.session[0]
-    : params.session;
-  const initialSessionId = DAILY_ASSESSMENTS.some(
-    (assessment) => assessment.sessionId === requestedSession,
-  )
-    ? requestedSession
-    : undefined;
-
+export default function AssessmentsPage() {
   return (
     <main className="inner-page assessments-page">
       <header className="page-hero assessments-hero">
@@ -55,7 +43,6 @@ export default async function AssessmentsPage({ searchParams }: AssessmentsPageP
       </header>
       <AssessmentExplorer
         assessments={DAILY_ASSESSMENTS}
-        initialSessionId={initialSessionId}
       />
     </main>
   );

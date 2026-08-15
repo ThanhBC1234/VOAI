@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
+import { InternalLink } from "../../components/InternalLink";
 
 export const metadata: Metadata = {
   title: "Tài nguyên học hợp pháp — VOAI Lab",
   description: "Đề cương, đề thi, sách mở và tài liệu chính thức dùng trong lộ trình VOAI.",
 };
+
+export const dynamic = "force-static";
 
 const groups = [
   {
@@ -51,7 +54,7 @@ export default function ResourcesPage() {
       <section className="resource-groups">
         {groups.map((group,index)=><article key={group.title}><div className="resource-heading"><span>0{index+1}</span><div><h2>{group.title}</h2><p>{group.note}</p></div></div><div className="resource-links">{group.links.map(([title,source,url])=><a key={title} href={url} target="_blank" rel="noreferrer"><div><strong>{title}</strong><small>{source}</small></div><span>↗</span></a>)}</div></article>)}
       </section>
-      <section className="resource-policy"><strong>Nguyên tắc sử dụng</strong><p>Không chép notebook mẫu rồi gọi là đã học. Hãy dự đoán, tự cài bản nhỏ, vượt bài kiểm tra mù và giải thích trước; tài liệu ngoài chỉ dùng để đối chiếu hoặc mở rộng.</p><a href="/practice">Vào phòng tự code →</a></section>
+      <section className="resource-policy"><strong>Nguyên tắc sử dụng</strong><p>Không chép notebook mẫu rồi gọi là đã học. Hãy dự đoán, tự cài bản nhỏ, vượt bài kiểm tra mù và giải thích trước; tài liệu ngoài chỉ dùng để đối chiếu hoặc mở rộng.</p><InternalLink href="/practice">Vào phòng tự code →</InternalLink></section>
     </main>
   );
 }

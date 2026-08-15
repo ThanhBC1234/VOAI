@@ -1,0 +1,5 @@
+# Baseline used by the eight teaching notebooks and the Codespaces kernel.
+# PyTorch is intentionally optional because the core notebook exercises use NumPy.
+ipykernel==6.30.1
+numpy==2.3.5
+scikit-learn==1.7.2

@@ -8,6 +8,8 @@ export const metadata: Metadata = {
   description: "Bài giảng chi tiết từ Python, ML, DL đến CV, NLP, Audio và đa phương thức theo đề cương IOAI 2026.",
 };
 
+export const dynamic = "force-static";
+
 function coreView(lesson: ReturnType<typeof getCoreLessonsInRecommendedOrder>[number]): LessonViewModel {
   return {
     id: lesson.id, title: lesson.title, domain: lesson.domain, category: lesson.officialCategory,

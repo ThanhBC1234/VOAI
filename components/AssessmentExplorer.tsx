@@ -220,6 +220,19 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      const requestedSession = new URLSearchParams(window.location.search).get("session");
+      const requestedAssessment = assessments.find(
+        (assessment) => assessment.sessionId === requestedSession,
+      );
+      if (!requestedAssessment) return;
+      setSelectedId(requestedAssessment.sessionId);
+      setDraft(emptyDraft(requestedAssessment));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [assessments]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
       try {
         const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
         const candidates = Array.isArray(parsed) ? parsed : [];

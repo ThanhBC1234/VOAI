@@ -3,7 +3,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
 
 const clean = (html) => html.replaceAll("<!-- -->", "");
-const socialImage = /http:\/\/localhost(?::\d+)?\/og\.png/;
+const socialImage = /https:\/\/voai-lab-2027\.dixmilsapin\.chatgpt\.site\/og\.png/;
 
 async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -37,6 +37,7 @@ test("all learning routes render their product-specific surface", async () => {
     ["/labs", /Phòng lab tương tác — VOAI Lab/, /Đừng chỉ đọc công thức/],
     ["/practice", /Tự code &amp; chấm bài — VOAI Lab/, /SOLO·90 CODE ARENA/],
     ["/resources", /Tài nguyên học hợp pháp — VOAI Lab/, /Không sách lậu, không link rác/],
+    ["/notebooks", /Notebook Colab — VOAI Lab/, /Tám notebook có khung/],
   ];
   for (const [path, title, copy] of routes) {
     const response = await render(path);
@@ -49,7 +50,11 @@ test("all learning routes render their product-specific surface", async () => {
 });
 
 test("roadmap and lesson evidence match the requested scope", async () => {
-  const [roadmapResponse, lessonsResponse] = await Promise.all([render("/roadmap"), render("/lessons")]);
+  const [roadmapResponse, lessonsResponse, lessonExplorerSource] = await Promise.all([
+    render("/roadmap"),
+    render("/lessons"),
+    readFile(new URL("../components/LessonsExplorer.tsx", import.meta.url), "utf8"),
+  ]);
   const roadmap = clean(await roadmapResponse.text());
   const lessons = clean(await lessonsResponse.text());
   assert.match(roadmap, />205<\/strong><span>bài học/);
@@ -57,49 +62,85 @@ test("roadmap and lesson evidence match the requested scope", async () => {
   assert.match(roadmap, />41<\/strong><span>checkpoint/);
   assert.match(roadmap, />60<\/strong><span>mục IOAI/);
   assert.match(roadmap, /href="\/assessments\?session=w01-lesson-1"/);
+  assert.match(roadmap, /href="\/lessons\?lesson=foundation-python"/);
   assert.match(lessons, /78\/78 bài/);
   assert.doesNotMatch(lessons, /hiddenTestIdeas/i);
+  assert.match(lessonExplorerSource, /new URLSearchParams\(window\.location\.search\)\.get\("lesson"\)/);
 });
 
-test("assessment bank renders all 290 records and honors a session deep-link", async () => {
-  const [response, largeModelResponse, assessmentSource, explorerSource] = await Promise.all([
+test("all 41 week lecture maps point to and cover the 78-lesson catalog", async () => {
+  const [weekMapSource, coreSource, multimodalSource, roadmapExplorerSource] = await Promise.all([
+    readFile(new URL("../content/week-lectures.ts", import.meta.url), "utf8"),
+    readFile(new URL("../content/lessons-core.ts", import.meta.url), "utf8"),
+    readFile(new URL("../content/lessons-multimodal.ts", import.meta.url), "utf8"),
+    readFile(new URL("../components/RoadmapExplorer.tsx", import.meta.url), "utf8"),
+  ]);
+  const weekKeys = [...weekMapSource.matchAll(/^\s*(\d+):\s*\[/gm)]
+    .map((match) => Number(match[1]));
+  assert.deepEqual(weekKeys, Array.from({ length: 41 }, (_, index) => index + 1));
+
+  const catalogIds = [...`${coreSource}\n${multimodalSource}`.matchAll(/^\s+id:\s*"([^"]+)",/gm)]
+    .map((match) => match[1]);
+  assert.equal(catalogIds.length, 78);
+  assert.equal(new Set(catalogIds).size, 78);
+
+  const lectureEntries = [...weekMapSource.matchAll(/\{\s*id:\s*"([^"]+)",\s*label:\s*"([^"]+)"\s*\}/g)]
+    .map((match) => ({ id: match[1], label: match[2] }));
+  assert.ok(lectureEntries.every((entry) => entry.label.trim().length > 0));
+  assert.deepEqual(
+    [...new Set(lectureEntries.map((entry) => entry.id))].sort(),
+    [...catalogIds].sort(),
+  );
+  assert.match(roadmapExplorerSource, /href=\{`\/lessons\?lesson=\$\{encodeURIComponent\(item\.id\)\}`\}/);
+});
+
+test("assessment bank renders all 290 records and defers static deep-link selection to the client", async () => {
+  const [response, deepLinkResponse, assessmentSource, explorerSource] = await Promise.all([
+    render("/assessments"),
     render("/assessments?session=w01-lab"),
-    render("/assessments?session=w25-lesson-4"),
     readFile(new URL("../content/daily-assessments.ts", import.meta.url), "utf8"),
     readFile(new URL("../components/AssessmentExplorer.tsx", import.meta.url), "utf8"),
   ]);
   assert.equal(response.status, 200);
+  assert.equal(deepLinkResponse.status, 200);
   const html = clean(await response.text());
-  const largeModelHtml = clean(await largeModelResponse.text());
+  const deepLinkHtml = clean(await deepLinkResponse.text());
   assert.equal((html.match(/data-assessment-item=/g) ?? []).length, 290);
+  assert.equal((deepLinkHtml.match(/data-assessment-item=/g) ?? []).length, 290);
   assert.match(html, /290\/290 phiên/);
-  assert.match(html, /id="assessment-w01-lab"/);
-  assert.match(html, /Lab · Mini EDA thuần Python/);
+  assert.match(html, /id="assessment-w01-lesson-1"/);
+  assert.match(deepLinkHtml, /id="assessment-w01-lesson-1"/);
   assert.match(html, /Bằng chứng code\/test bắt buộc/);
   assert.match(html, /Formative\/manual evidence/);
   assert.match(html, /self-score thủ công/);
-  assert.match(html, /\/ 10 · sàn 4/);
+  assert.match(html, /\/ 20 · sàn 8/);
   assert.match(html, /\/ 50 · sàn 20/);
-  assert.match(html, /\/ 25 · sàn 10/);
-  assert.match(html, /\/ 15 · sàn 6/);
+  assert.match(html, /\/ 10 · sàn 4/);
   assert.match(html, /Xuất attempts JSON/);
   assert.doesNotMatch(html, /hiddenTestIdeas|expectedOutput|correctIndex/i);
-  assert.match(largeModelHtml, /Được phép dùng thư viện và model\/pretrained weights phù hợp/);
-  assert.match(largeModelHtml, /pipeline, evaluation và ít nhất một ablation/);
+  assert.match(assessmentSource, /Được phép dùng thư viện và model\/pretrained weights phù hợp/);
+  assert.match(assessmentSource, /pipeline, evaluation và ít nhất một ablation/);
   assert.match(assessmentSource, /minimumSectionScoreTotal > assessment\.passRule\.minimumScore/);
+  assert.match(explorerSource, /new URLSearchParams\(window\.location\.search\)\.get\("session"\)/);
+  assert.match(explorerSource, /setSelectedId\(requestedAssessment\.sessionId\)/);
   assert.match(explorerSource, /value\.status === computedStatusFor\(draft, assessment\)/);
   assert.match(explorerSource, /score <= assessment\.scoreWeights\[category\]/);
 });
 
 test("ships notebooks, local grader, worker, and social card", async () => {
-  const [notebooks, packageJson, og] = await Promise.all([
+  const [notebooks, packageJson, og, notebookHubSource] = await Promise.all([
     readdir(new URL("../notebooks/", import.meta.url)),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
     stat(new URL("../public/og.png", import.meta.url)),
+    readFile(new URL("../components/NotebookHub.tsx", import.meta.url), "utf8"),
   ]);
   assert.equal(notebooks.filter((name) => name.endsWith(".ipynb")).length, 8);
   assert.doesNotMatch(packageJson, /react-loading-skeleton|codex-preview/i);
   assert.ok(og.size > 100_000);
+  assert.match(notebookHubSource, /process\.env\.NEXT_PUBLIC_GITHUB_REPOSITORY/);
+  assert.match(notebookHubSource, /window\.location\.hostname\.match\(\/\^\(\[\^\.\]\+\)\\\.github\\\.io\$\/i\)/);
+  assert.match(notebookHubSource, /https:\/\/colab\.research\.google\.com\/github\/\$\{repository\}\/blob\/main\/notebooks\//);
+  assert.equal((notebookHubSource.match(/window\.open\(url, "_blank", "noopener,noreferrer"\)/g) ?? []).length, 2);
   await Promise.all([
     access(new URL("../grader/grade.py", import.meta.url)),
     access(new URL("../grader/specs.json", import.meta.url)),
@@ -129,11 +170,15 @@ test("runtime learning tools state their timing and visibility boundaries honest
   assert.match(labSource, /sampleRate=64,sampleCount=128/);
   assert.match(labSource, /oneSidedBins=sampleCount\/2\+1/);
   assert.match(practice, /có thể xem qua source\/bundle/);
-  assert.doesNotMatch(practice, /sandbox/i);
+  assert.match(practice, /không phải sandbox cho mã thù địch/);
   assert.match(resources, /chưa có bảng ánh xạ từng bài sang chương sách/);
   assert.match(workerSource, /event\.data\.type === "init"/);
   assert.match(workerSource, /pyodide\.runPython\("dict\(\)"\)/);
+  assert.match(practice, /Mỗi lượt chạy dùng một Web Worker và Python runtime mới/);
+  assert.match(practiceSource, /workerRef\.current\?\.terminate\(\)/);
+  assert.match(practiceSource, /new Worker\(sitePath\("\/pyodide-worker\.js"\)\)/);
   assert.match(practiceSource, /worker\.postMessage\(\{type:"run"/);
+  assert.doesNotMatch(practiceSource, /inspect\.getsource/);
   assert.match(practiceSource, /Thời gian tải Python không tính vào giới hạn này/);
   assert.match(roadmapSource, /Asia\/Ho_Chi_Minh/);
   assert.doesNotMatch(roadmapSource, /toISOString\(\)\.slice/);

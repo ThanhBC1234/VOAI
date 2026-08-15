@@ -1,9 +1,9 @@
 # Kiến trúc hệ thống VOAI Lab
 
 Tài liệu này mô tả code đang có trong kho mã, không mô tả một LMS lý tưởng chưa
-được triển khai. Hệ thống hiện ưu tiên học cục bộ, nội dung tĩnh, minh bạch và
-không cần tài khoản. Đổi lại, tiến độ không đồng bộ giữa thiết bị và các bài
-kiểm tra mù phía client chỉ có giá trị sư phạm.
+được triển khai. Hệ thống ưu tiên nội dung tĩnh, chạy cục bộ hoặc trên GitHub
+Pages, minh bạch và không cần tài khoản ứng dụng. Đổi lại, tiến độ không đồng bộ
+giữa thiết bị và các bài kiểm tra mù phía client chỉ có giá trị sư phạm.
 
 ## 1. Bức tranh tổng thể
 
@@ -14,6 +14,7 @@ flowchart TD
     V --> L["/lessons · hai catalog bài giảng"]
     V --> A["/assessments · AssessmentExplorer"]
     V --> B["/labs · mô phỏng React/canvas"]
+    V --> NB["/notebooks · link GitHub/Colab"]
     V --> P["/practice · CodePractice"]
     V --> X["/resources · link nguồn ngoài"]
     R --> LS["localStorage tiến độ/attempt"]
@@ -23,11 +24,15 @@ flowchart TD
     P --> W["pyodide-worker.js"]
     W --> CDN["jsDelivr · Pyodide 0.27.7"]
     W --> PR["Python + public/client-side cases"]
+    NB --> COLAB["Google Colab · runtime tạm thời"]
     U --> N["8 notebook Jupyter"]
     U --> C["grader/grade.py"]
     C --> S["grader/specs.json"]
     C --> SP["Python -I subprocess / case"]
     SP --> SUB["Tệp bài làm của người học"]
+    GA["GitHub Actions"] -. khi deploy thành công .-> GP["GitHub Pages · static artifact"]
+    GP --> V
+    CS["GitHub Codespaces"] --> V
 ```
 
 Code Arena, assessment thủ công và CLI grader là ba luồng độc lập. Việc đạt một
@@ -51,6 +56,7 @@ tự đánh dấu một phiên lộ trình.
 | Notebook | `notebooks/*.ipynb` | 8 bài thực hành có TODO, visible tests và exit ticket |
 | Grader CLI | `grader/grade.py`, `grader/worker.py`, `grader/specs.json` | Chạy từng case trong subprocess và tính tối đa 45 điểm correctness |
 | Build/runtime | `vite.config.ts`, `worker/index.ts`, `scripts/run-vinext.mjs` | vinext, Vite, Cloudflare worker và lệnh dev/build/start |
+| Học/deploy GitHub | `.devcontainer/`, `.github/workflows/`, `next.config.ts`, `scripts/prepare-pages.mjs` | Codespaces, CI và artifact tĩnh cho repository `voai-lab` |
 | Dữ liệu máy chủ | `db/`, `.openai/hosting.json` | Khung D1 tùy chọn; hiện chưa có bảng và chưa bật binding |
 
 `content/curriculum.ts` tự kiểm tra các invariant khi module được nạp: đúng 41
@@ -66,6 +72,7 @@ dành cho con người; khi thay đổi lịch, phải giữ dữ liệu TypeScr
 ```text
 npm run dev    -> vinext dev
 npm run build  -> vinext build
+npm run build:pages -> vinext build tĩnh + chuẩn hóa artifact Pages
 npm start      -> vinext start
 ```
 
@@ -77,6 +84,19 @@ Hiện `.openai/hosting.json` có `d1: null` và `r2: null`; `db/schema.ts` tr�
 Vì vậy không được mô tả hệ thống như đã có account, database, cloud backup hoặc
 đồng bộ tiến độ. `db/index.ts` chỉ là helper sẽ báo lỗi nếu code cố dùng binding
 `DB` khi binding chưa tồn tại.
+
+Bản phát hành GitHub tĩnh không cài CLI migration và không giữ
+`drizzle.config.ts`. Nếu sau này bật D1, cần chọn/cài lại công cụ migration, thêm
+cấu hình tương ứng và kiểm tra workflow triển khai trước khi tạo hoặc áp dụng SQL.
+
+Khi `GITHUB_PAGES=true`, `next.config.ts` bật static export và asset prefix
+`/voai-lab`; `scripts/prepare-pages.mjs` kiểm đủ route rồi tạo cấu trúc
+`route/index.html` cùng `.nojekyll`. Workflow trong `.github/workflows/`
+chạy các cổng chất lượng và có job deploy Pages; `.devcontainer/` cấu hình
+Codespaces. Đây là năng lực có trong source, không phải bằng chứng repository đã
+bật Pages hoặc URL công khai đã tồn tại. Trạng thái deploy chỉ được xác nhận từ
+job **Deploy GitHub Pages** thành công và URL environment của chính repository.
+Runbook nằm ở [Học online bằng GitHub](GITHUB_ONLINE.md).
 
 ## 4. Route và hành vi phía client
 
@@ -92,6 +112,12 @@ Server page truyền dữ liệu lộ trình cho `RoadmapExplorer`. Client cho p
 
 Ma trận chỉ nói một mục đã được **lên kế hoạch bao phủ**. Nó không suy ra mastery
 và không kiểm tra artifact.
+
+`content/week-lectures.ts` ánh xạ đủ 41 tuần tới các bài giảng khuyến nghị;
+`RoadmapExplorer` tạo deep-link `/lessons?lesson=<id>` và
+`LessonsExplorer` chọn ID hợp lệ đó. Đây là ánh xạ theo tuần. Nó không tạo quan
+hệ 1:1 giữa 205 phiên loại `lesson` và 78 record bài giảng; outcome/kế hoạch
+của từng phiên vẫn là nguồn sự thật cho artifact trong ngày.
 
 ### `/lessons`
 
@@ -196,10 +222,11 @@ nhận và trạng thái tự đánh giá. Ví dụ rút gọn:
     "assessmentId": "assessment-w01-lesson-1",
     "sessionId": "w01-lesson-1",
     "timestamp": "2026-08-15T00:30:00.000Z",
-    "retrievalAnswers": ["Câu trả lời 1", "Câu trả lời 2"],
+    "retrievalAnswers": ["Câu trả lời 1", "Câu trả lời 2", "Câu trả lời 3"],
     "codeEvidence": "File, lệnh chạy và test log",
+    "evidenceLink": "",
     "explanation": "Giải thích bằng lời người học",
-    "scores": { "retrieval": 15, "coding": 30, "validation": 15, "explanation": 15 },
+    "scores": { "retrieval": 15, "coding": 35, "validation": 15, "explanation": 10 },
     "soloConfirmed": true,
     "noAutomaticFailConfirmed": true,
     "score": 75,
@@ -248,33 +275,36 @@ web chỉ là tiện ích.
 
 Luồng một lần bấm **Chạy test/Nộp bài**:
 
-1. `CodePractice` tạo hoặc tái dùng một `Worker("/pyodide-worker.js")`.
+1. `CodePractice` terminate worker cũ nếu còn rồi tạo một
+   `Worker("/pyodide-worker.js")` mới cho mỗi lần bấm chạy/nộp.
 2. Nếu runtime chưa sẵn sàng, main thread gửi `init` và hiển thị trạng thái tải
    Python riêng.
-3. Worker tải `pyodide.js` và runtime 0.27.7 từ jsDelivr ở lần đầu, rồi gửi
-   thông báo `ready`.
+3. Worker tải/khởi tạo `pyodide.js` và runtime 0.27.7 từ jsDelivr, rồi gửi
+   thông báo `ready`; cache HTTP có thể giảm tải mạng nhưng runtime vẫn mới
+   mỗi lượt.
 4. Main thread gửi `{type: "run", requestId, code, tests}` và lúc này mới bắt
    đầu bộ đếm 8 giây.
 5. Worker tạo một Python dictionary mới làm global namespace cho lượt chạy.
 6. Worker chạy code và từng test tuần tự trong namespace đó, thu stdout/stderr
    rồi trả `details`.
-7. Main thread chỉ nhận kết quả đúng `requestId`; namespace được hủy sau lượt
-   chạy.
+7. Main thread chỉ nhận kết quả đúng `requestId`, sau đó terminate worker;
+   nhánh lỗi cũng terminate worker.
 8. Nếu phần thực thi vượt 8 giây, main thread terminate worker và báo timeout.
 
 Các giới hạn cần biết:
 
 - lần đầu cần internet; Pyodide không được đóng gói offline trong kho mã;
 - tải runtime có trạng thái riêng và không tính vào giới hạn chạy code 8 giây;
-- worker được tái sử dụng trong cùng phiên trang nhưng mỗi lượt có global
-  namespace mới. Runtime và cache module của tiến trình Pyodide vẫn có thể tồn
-  tại giữa các lượt; đây không phải mức cô lập của process/container mới;
+- mỗi lượt dùng Web Worker và Pyodide runtime mới; cache HTTP của trình duyệt có
+  thể giữ tài nguyên tải xuống, nhưng state Python/module của worker trước không
+  được tái sử dụng;
 - Web Worker tách công việc khỏi DOM/main thread nhưng không phải sandbox an
   toàn cho mã thù địch;
 - ca kiểm tra mù của Code Arena được định nghĩa trong client component và có
   thể đọc qua bundle/source; cơ chế này chỉ giúp luyện tập mà không nhìn trước;
 - lỗi test chỉ được phân loại rộng thành assertion sai hoặc lỗi runtime;
-- vượt timeout làm worker bị hủy và lần sau phải tải lại runtime trước khi chạy.
+- kết quả, lỗi và timeout đều làm worker bị hủy; lượt sau luôn khởi tạo runtime
+  mới trước khi chạy.
 
 Không chạy code không tin cậy trên `/practice`. Nếu cần môi trường nhiều người
 dùng thật, phải chuyển chấm bài sang hạ tầng cô lập server-side có quota CPU,
@@ -327,13 +357,15 @@ output/đáp án hoàn chỉnh.
 
 `scripts/validate_notebooks.py` chỉ đọc JSON và kiểm tra:
 
-- đúng 8 tệp;
-- nbformat 4;
-- cờ SOLO-90;
+- tập tên tệp khớp chính xác 8 notebook đã khai báo, không thiếu/thừa;
+- JSON đọc được, nbformat 4 và cờ SOLO-90;
 - ít nhất 10 cell và có code cell;
-- có hai nhãn `Visible tests` và `Exit ticket`.
+- từng code cell parse được bằng Python AST;
+- mọi code cell có `execution_count: null` và không có output lưu sẵn;
+- có đủ marker `TODO`, `Visible tests` và `Exit ticket`.
 
-Nó không import dependency, không chạy cell và không kiểm tra kết quả số.
+Nó không import dependency, không chạy cell, không chạy visible tests và không
+kiểm tra đáp án/kết quả số.
 
 `scripts/generate-notebooks.mjs` là công cụ tác giả dùng để sinh lại toàn bộ 8
 tệp bằng `writeFileSync`. Chạy script này sẽ ghi đè notebook cùng tên. Người học
@@ -347,7 +379,7 @@ vận hành hằng ngày.
 | localStorage | Tiện, không cần login | Chống sửa, backup, sync, xác thực mastery |
 | Quiz bài giảng | Chỉ mở đáp án sau khi có input | Proctoring hoặc lưu lịch sử |
 | Assessment thủ công | Lưu retrieval, evidence, rubric và nhiều attempt | Thực thi code, xác minh link/evidence, tự động chứng minh correctness |
-| Pyodide worker | Tách khỏi UI thread, timeout phía client | OS isolation, memory/network/filesystem policy |
+| Pyodide worker | Fresh Worker mỗi lượt, tách khỏi UI thread, timeout phía client | OS isolation, memory/network/filesystem policy |
 | CLI grader | Subprocess/case, isolated Python mode, timeout | Container, seccomp, memory quota, code trust boundary |
 | Kiểm tra mù phía client | Giảm gợi ý trong luồng học | Bảo mật trước người có source/bundle |
 | D1/R2 | Khung cấu hình tùy chọn | Binding, schema người học, backup hiện hành |
@@ -368,8 +400,9 @@ Không đặt API key, token, dữ liệu cá nhân hoặc đề thi bí mật t
 | --- | --- | --- |
 | `npm run lint` | Quy tắc lint trên source hiện tại | Route render hoặc tương tác đúng |
 | `npm run build` | Vinext build thành công | Deploy thành công, link ngoài sống |
+| `npm run build:pages` + `node --test tests/pages-export.test.mjs` | Artifact tĩnh có route/asset theo contract Pages | Repository đã bật Pages hoặc job deploy đã chạy |
 | `npm test` | Build rồi chạy file test Node được khai báo | Mọi route và mọi tương tác đã được bao phủ |
-| `py scripts/validate_notebooks.py` | Cấu trúc 8 notebook hợp lệ | Cell chạy được hoặc đáp án đúng |
+| `py scripts/validate_notebooks.py` | Bộ 8 tệp/metadata/AST hợp lệ, không có execution history/output và đủ marker | Dependency/cell/test chạy được hoặc đáp án đúng |
 | `py -m unittest grader.tests.test_grader` | Các unit test hiện có của grader đạt | Mọi task/constraint/private case đúng |
 | HTTP 200 từng route | Server trả trang | Nút, canvas, localStorage, worker hoạt động |
 | Browser test thủ công | Hành vi đã thao tác trong browser/màn hình | Môi trường khác hoặc edge case chưa thử |
@@ -395,4 +428,5 @@ Nếu triển khai cho nhiều người học, thứ tự hợp lý là:
 
 Cách vận hành hằng ngày nằm trong
 [Hướng dẫn người học](HUONG_DAN_NGUOI_HOC.md); hợp đồng dùng AI và rubric nằm
-trong [Quy tắc SOLO-90](QUY_TAC_SOLO_90.md).
+trong [Quy tắc SOLO-90](QUY_TAC_SOLO_90.md); thiết lập Pages, Codespaces, Colab
+và Actions nằm trong [Học online bằng GitHub](GITHUB_ONLINE.md).

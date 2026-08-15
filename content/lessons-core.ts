@@ -140,12 +140,12 @@ export const coreLessons: CoreLesson[] = [
       "So sánh nghiệm normal equation, gradient descent và baseline dự đoán mean.",
     ],
     intuition:
-      "Mô hình chọn một siêu phẳng sao cho tổng khoảng cách theo trục y từ điểm dữ liệu tới siêu phẳng là nhỏ nhất. Hệ số w_j đo mức thay đổi dự kiến của y khi x_j tăng một đơn vị và các feature khác giữ nguyên; nó không tự chứng minh quan hệ nhân quả.",
+      "Mô hình bình phương tối thiểu chọn một siêu phẳng sao cho tổng bình phương residual theo trục y từ các điểm dữ liệu tới siêu phẳng là nhỏ nhất. Hệ số w_j đo mức thay đổi dự kiến của y khi x_j tăng một đơn vị và các feature khác giữ nguyên; nó không tự chứng minh quan hệ nhân quả.",
     math: [
       "Prediction: y_hat = Xw + b.",
       "MSE: L = (1/n)||Xw + b1 - y||_2^2.",
       "Gradient: dL/dw = (2/n)X^T(Xw+b-y); dL/db = (2/n)sum_i(y_hat_i-y_i).",
-      "Nếu X^T X khả nghịch: w = (X^T X)^(-1)X^T y; thực hành dùng solve hoặc lstsq.",
+      "Nếu X_tilde=[X,1] đã gồm cột bias, theta=[w;b] và X_tilde^T X_tilde khả nghịch: theta=(X_tilde^T X_tilde)^(-1)X_tilde^T y; thực hành dùng solve hoặc lstsq.",
       "R^2 = 1 - SSE/SST và có thể âm trên dữ liệu đánh giá.",
     ],
     fromScratchSteps: [
@@ -1273,7 +1273,7 @@ export const coreLessons: CoreLesson[] = [
     math: [
       "Expected squared error có thể phân rã thành bias^2 + variance + irreducible noise.",
       "Generalization gap = validation loss - train loss dưới cùng cách tính.",
-      "Learning curve xem metric theo số mẫu; validation tăng khi thêm dữ liệu gợi ý variance cao.",
+      "Learning curve xem metric theo số mẫu; validation loss giảm hoặc validation score tăng rõ khi thêm dữ liệu là dấu hiệu mô hình có thể đang bị variance cao.",
       "Model selection lặp nhiều lần trên một validation làm overfit validation.",
     ],
     fromScratchSteps: [
@@ -2059,7 +2059,7 @@ export const coreLessons: CoreLesson[] = [
     math: [
       "g_B=(1/|B|)sum_{i in B} ∇L_i là ước lượng không chệch nếu sample đều.",
       "SGD: theta <- theta - eta*g_B.",
-      "Accumulation K microbatches với mean loss: chia loss cho K trước backward hoặc chia gradient trước step.",
+      "Để lấy mean trên effective batch, microbatch k có n_k mẫu và mean loss L_k phải đóng góp n_k L_k / sum_j n_j; chỉ chia đều cho K khi mọi microbatch có cùng số mẫu.",
       "Một epoch có ceil(n/batch_size) optimizer steps nếu không accumulation.",
     ],
     fromScratchSteps: [
@@ -2072,14 +2072,14 @@ export const coreLessons: CoreLesson[] = [
     ],
     whenToUse: ["Optimizer baseline dễ hiểu", "Model lớn cần accumulation", "Nghiên cứu tác động batch noise"],
     failureModes: [
-      { symptom: "Gradient lớn gấp K", cause: "Accumulation mean loss nhưng không chia K", fix: "Scale loss/gradient và xử lý batch cuối" },
+      { symptom: "Gradient sai scale hoặc batch cuối bị thiên lệch", cause: "Cộng các microbatch mean mà không chuẩn hóa theo số mẫu thực", fix: "Weight theo n_k/tổng số mẫu; chỉ chia K khi mọi microbatch bằng nhau" },
       { symptom: "Mẫu luôn cùng thứ tự", cause: "Không shuffle train", fix: "Shuffle mỗi epoch, không shuffle temporal khi protocol cấm" },
       { symptom: "Batch lớn giảm accuracy", cause: "LR/số update/noise thay đổi", fix: "Retune LR/scheduler và so theo số steps" },
     ],
     complexity: { time: "Một epoch gần như không đổi theo batch về FLOPs, nhưng throughput khác", space: "Activation tăng gần tuyến tính batch", notes: "Accumulation giảm activation memory mỗi microbatch, không giảm parameter/optimizer memory." },
     miniQuiz: [
       { question: "Mini-batch gradient là gì so với full gradient khi sample đều?", choices: ["Ước lượng không chệch có nhiễu", "Luôn chính xác", "Không liên quan", "Luôn bằng 0"], correctIndex: 0, explanation: "Kỳ vọng theo batch sampling bằng full gradient." },
-      { question: "Accumulation K lần với mean loss cần chú ý gì?", choices: ["Nhân loss K", "Chia đúng để gradient không lớn K lần", "Tắt shuffle", "Xóa optimizer"], correctIndex: 1, explanation: "Mục tiêu là mean trên effective batch." },
+      { question: "Accumulation K lần với mean loss cần chú ý gì?", choices: ["Nhân loss K", "Chuẩn hóa theo số mẫu của effective batch", "Tắt shuffle", "Xóa optimizer"], correctIndex: 1, explanation: "Chỉ chia đều K khi các microbatch bằng nhau; trường hợp tổng quát phải weight theo số mẫu." },
     ],
     codingChallenge: {
       title: "Accumulation trainer chính xác",
@@ -2303,9 +2303,9 @@ export const coreLessons: CoreLesson[] = [
     intuition:
       "BatchNorm chuẩn hóa activation theo statistics mini-batch khi train, rồi học scale gamma và shift beta để không mất khả năng biểu diễn. Khi eval, nó dùng running statistics; vì vậy mode sai hoặc batch nhỏ làm prediction bất ổn.",
     math: [
-      "mu_B=mean_B x; var_B=mean_B (x-mu_B)^2.",
+      "Forward train kiểu PyTorch dùng mu_B=mean_B x và var_B=mean_B (x-mu_B)^2, tức variance biased với correction=0.",
       "x_hat=(x-mu_B)/sqrt(var_B+eps); y=gamma*x_hat+beta.",
-      "running <- (1-momentum)*running + momentum*batch_stat theo convention PyTorch.",
+      "Theo PyTorch, running_mean cập nhật từ batch mean; running_var cập nhật bằng (1-momentum)*running_var + momentum*var_unbiased với correction=1, dù forward dùng var_B biased.",
       "Conv BatchNorm thường thống kê trên N,H,W cho từng channel C.",
     ],
     fromScratchSteps: [

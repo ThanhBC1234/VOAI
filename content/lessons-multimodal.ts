@@ -77,7 +77,7 @@ export const multimodalLessons: readonly MultimodalLesson[] = [
       "Kích thước một chiều: $O=\\lfloor (I+2P-D(K-1)-1)/S \\rfloor+1$.",
       "Forward NCHW: $Y_{n,o,i,j}=b_o+\\sum_c\\sum_u\\sum_v W_{o,c,u,v}X_{n,c,iS+uD-P,jS+vD-P}$.",
       "Số tham số: $C_{out}(C_{in}K_hK_w+1)$ nếu có bias; không phụ thuộc chiều rộng/cao ảnh.",
-      "Receptive field qua nhiều lớp: $r_l=r_{l-1}+(k_l-1)j_{l-1}$ và jump $j_l=j_{l-1}s_l$.",
+      "Receptive field qua nhiều lớp: $r_l=r_{l-1}+(k_l-1)d_lj_{l-1}$ và jump $j_l=j_{l-1}s_l$, với $d_l$ là dilation của lớp l.",
     ],
     fromScratchSteps: [
       "Viết hàm zero_pad cho tensor NCHW, không dùng np.pad ở lần đầu.",
@@ -422,7 +422,7 @@ export const multimodalLessons: readonly MultimodalLesson[] = [
       "Ghép tối ưu: $\\hat\\sigma=\\arg\\min_\\sigma\\sum_i C(y_i,\\hat y_{\\sigma(i)})$.",
       "Cost thường cộng classification, $L_1$ box và $1-GIoU$ với hệ số riêng.",
       "Self-attention chuẩn trên S tokens tốn $O(S^2d)$ thời gian và $O(S^2)$ ma trận attention.",
-      "Số output luôn Q queries; Q phải lớn hơn số vật thể tối đa hợp lý.",
+      "Số output luôn là Q queries; để ghép mọi ground-truth trong một mẫu cần $Q\\ge M_{max}$, với $M_{max}$ là số vật thể tối đa mà protocol hỗ trợ.",
     ],
     fromScratchSteps: [
       "Tạo 3 ground-truth và 5 predictions; lập ma trận cost bằng NumPy.",
@@ -1275,7 +1275,7 @@ export const multimodalLessons: readonly MultimodalLesson[] = [
     intuition:
       "Phân loại text có thể rất mạnh với tín hiệu từ/cụm từ: TF–IDF + linear là baseline khó bỏ qua. Encoder neural hữu ích khi cần ngữ cảnh, word order hoặc transfer. Multiclass chọn một lớp bằng softmax; multilabel cho từng lớp một sigmoid độc lập. Không được suy mục tiêu chỉ từ shape nhãn.",
     math: [
-      "TF–IDF thường $tf(t,d)\\log((N+1)/(df(t)+1))+1$; convention cụ thể phải thống nhất train/inference.",
+      "Với smooth IDF mặc định của scikit-learn, $tfidf(t,d)=tf(t,d)[\\log((N+1)/(df(t)+1))+1]$ trước bước chuẩn hóa vector; convention cụ thể phải thống nhất train/inference.",
       "Multiclass CE dùng một target; multilabel BCE: $-\\sum_k[y_k\\log p_k+(1-y_k)\\log(1-p_k)]$.",
       "Macro-F1 trung bình F1 từng lớp; threshold multilabel được chọn trên validation, không test.",
       "Class weights thay đổi objective; không tự động làm probability calibrated.",
@@ -1793,7 +1793,7 @@ export const multimodalLessons: readonly MultimodalLesson[] = [
       "FFT toàn tín hiệu cho biết có tần số nào nhưng mất thời điểm. STFT cắt waveform thành cửa sổ chồng lặp rồi FFT từng frame, tạo ma trận thời gian–tần số. Cửa sổ dài phân biệt tần số tốt hơn nhưng làm mờ thay đổi nhanh; cửa sổ ngắn ngược lại. Phase chứa thông tin cần cho tái tạo, dù nhiều model chỉ dùng magnitude/log-mel.",
     math: [
       "$X[m,k]=\\sum_{n=0}^{L-1}x[n+mH]w[n]e^{-j2\\pi kn/N_{fft}}$.",
-      "Frequency bin $f_k=k f_s/N_{fft}$; rFFT tín hiệu thực giữ $N_{fft}/2+1$ bins.",
+      "Frequency bin $f_k=k f_s/N_{fft}$; rFFT tín hiệu thực giữ $\\lfloor N_{fft}/2\\rfloor+1$ bins, bằng $N_{fft}/2+1$ khi $N_{fft}$ chẵn.",
       "Magnitude $|X|$, power $|X|^2$; dB power thường $10\\log_{10}(P/P_{ref})$.",
       "Độ phân giải bin $f_s/N_{fft}$ không đồng nghĩa khả năng phân giải thật nếu chỉ zero-pad window ngắn.",
     ],
@@ -1828,7 +1828,7 @@ export const multimodalLessons: readonly MultimodalLesson[] = [
         misconceptionToCatch: "Cho rằng tăng window cải thiện cả hai miễn phí.",
       },
       {
-        question: "Vì sao rFFT có n_fft/2+1 bins cho tín hiệu thực?",
+        question: "Với n_fft chẵn, vì sao rFFT có n_fft/2+1 bins cho tín hiệu thực?",
         expectedAnswer: "Phổ âm/dương liên hợp nên nửa không âm đủ thông tin, gồm DC và Nyquist khi n_fft chẵn.",
         misconceptionToCatch: "Cho rằng nửa còn lại bị mất ngẫu nhiên nên không tái tạo được.",
       },

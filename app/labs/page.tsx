@@ -6,6 +6,8 @@ export const metadata: Metadata = {
   description: "Thay đổi dữ liệu và tham số để quan sát gradient descent, k-NN, convolution, attention, tín hiệu âm thanh và metric hoạt động.",
 };
 
+export const dynamic = "force-static";
+
 export default function LabsPage() {
   return (
     <main className="inner-page">

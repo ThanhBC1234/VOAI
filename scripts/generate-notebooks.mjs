@@ -107,7 +107,7 @@ for (const moduleSpec of modules) {
       code(moduleSpec.setup),
       md("## Tự cài đặt\n\nKhông mở đáp án. Đầu tiên hãy ghi input/output, shape và edge cases; sau đó mới viết code."),
       code(moduleSpec.task),
-      md("## Visible tests\n\nCác test dưới đây chỉ kiểm tra interface và trường hợp cơ bản. Hidden tests của bộ chấm sẽ dùng dữ liệu khác và edge cases."),
+      md("## Visible tests\n\nCác test dưới đây chỉ kiểm tra interface và trường hợp cơ bản. Notebook không có hidden test phía máy chủ; sau khi test đạt, hãy tự viết thêm edge case và lưu evidence vào bản sao của bạn."),
       code(moduleSpec.tests),
       md(`## Deep 60\n\n${moduleSpec.deep}`),
       md("## Exit ticket\n\n1. Tôi có thể giải thích thuật toán mà không nhìn code không?  \n2. Edge case nào làm bản đầu tiên sai?  \n3. Độ phức tạp thời gian/bộ nhớ là gì?  \n4. Tôi sẽ ôn lại điều gì vào ngày +1, +7 và +21?"),

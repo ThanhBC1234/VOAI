@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { InternalLink } from "./InternalLink";
 
 type LabId = "gradient" | "knn" | "convolution" | "attention" | "audio" | "metrics";
 
@@ -199,7 +200,7 @@ export function InteractiveLabs() {
       {active === "attention" && <AttentionLab />}
       {active === "audio" && <AudioLab />}
       {active === "metrics" && <MetricsLab />}
-      <div className="lab-challenge"><span>SAU KHI THỬ</span><strong>Viết lại quy tắc cập nhật bằng lời của bạn, rồi tự code phiên bản NumPy trong khu Chấm bài.</strong><a href="/practice">Mở bài tự code →</a></div>
+      <div className="lab-challenge"><span>SAU KHI THỬ</span><strong>Viết lại quy tắc cập nhật bằng lời của bạn, rồi tự code phiên bản NumPy trong khu Chấm bài.</strong><InternalLink href="/practice">Mở bài tự code →</InternalLink></div>
     </div>
   );
 }

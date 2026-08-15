@@ -1,0 +1,27 @@
+{
+  "name": "VOAI Lab",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": {
+      "version": "3.11"
+    }
+  },
+  "postCreateCommand": "npm ci && python -m pip install --disable-pip-version-check -r requirements-notebooks.txt",
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": {
+      "label": "VOAI Lab",
+      "onAutoForward": "openPreview",
+      "visibility": "private"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "ms-python.python",
+        "ms-toolsai.jupyter"
+      ]
+    }
+  }
+}

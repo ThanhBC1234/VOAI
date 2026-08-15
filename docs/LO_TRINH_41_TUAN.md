@@ -200,7 +200,7 @@ Mỗi dòng “B1…B5” là năm phiên liên tiếp; sau đó Lab và Checkpo
 
 - Tiên quyết: K-Means/PCA. Mục tiêu: density/noise, dendrogram/linkage, spectral cho cụm phi lồi.
 - B1 DBSCAN; B2 k-distance/eps; B3 hierarchical; B4 spectral; B5 chọn thuật toán.
-- Lab: benchmark 4 thuật toán × 5 datasets. Checkpoint: core/border/noise + dendrogram + lựa chọn 4 tình huống, đạt ≥75.
+- Lab: benchmark 4 thuật toán × 5 toy datasets nhỏ để vừa phiên 60 phút; mở rộng kích thước ở phiên dự án. Checkpoint: core/border/noise + dendrogram + lựa chọn 4 tình huống, đạt ≥75.
 - Deliverable: `w13_clustering_arena.ipynb`.
 
 #### Tuần 14 · 14/11–20/11/2026 · Dự án 1 — Tabular/Time-series
@@ -288,7 +288,7 @@ Mỗi dòng “B1…B5” là năm phiên liên tiếp; sau đó Lab và Checkpo
 
 - Tiên quyết: CNN + box geometry. Mục tiêu: box/IoU/matching/NMS/mAP; YOLO, SSD, DETR (PDF ghi DERT).
 - B1 box formats/IoU; B2 matching; B3 NMS; B4 architecture trade-offs; B5 mAP/error taxonomy.
-- Lab: tiny detector. Checkpoint: code IoU/NMS + trace matching + AP, đạt ≥75; geometry tests phải pass.
+- Lab: detector pretrained, fine-tune số batch/epoch cố định trên tiny subset rồi báo mAP/latency. Checkpoint: code IoU/NMS + trace matching + AP, đạt ≥75; geometry tests phải pass.
 - Deliverable: `w25_object_detection.ipynb`.
 
 #### Tuần 26 · 06/02–12/02/2027 · Segmentation với U-Net
@@ -309,7 +309,7 @@ Mỗi dòng “B1…B5” là năm phiên liên tiếp; sau đó Lab và Checkpo
 
 - Tiên quyết: ResNet + augmentation + embeddings. Mục tiêu: paired views, contrastive loss, pretrain + linear probe.
 - B1 pretext/shortcut; B2 positive/negative pairs; B3 contrastive loss; B4 pretraining; B5 label-efficiency probe.
-- Lab: label-scarce vision. Checkpoint: chọn augment + trace batch + đọc probe table, đạt ≥70.
+- Lab: toy SSL run ngắn, sau đó linear probe trên embeddings đã cache; full pretrain là mở rộng ngoài phiên 60 phút. Checkpoint: chọn augment + trace batch + đọc probe table, đạt ≥70.
 - Deliverable: `w28_vision_ssl.ipynb`.
 
 #### Tuần 29 · 27/02–05/03/2027 · CLIP và vision–text

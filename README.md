@@ -65,10 +65,29 @@ npm start
 ```
 
 `npm run build` chỉ chứng minh dự án dựng được trong môi trường hiện tại; nó
-không tự chứng minh website đã được deploy. Bản production được đóng gói và
-phát hành qua OpenAI Sites; URL cụ thể nằm trong phần bàn giao của release.
-`.openai/hosting.json` để D1/R2 ở `null` vì phiên bản này không dùng cơ sở dữ
-liệu hay object storage phía máy chủ.
+không tự chứng minh website đã được deploy. Kho mã có cấu hình build cho OpenAI
+Sites/Cloudflare và GitHub Pages, nhưng chỉ được gọi là đã phát hành khi job
+deploy tương ứng thành công và có URL từ môi trường đó. `.openai/hosting.json`
+để D1/R2 ở `null` vì phiên bản này không dùng cơ sở dữ liệu hay object storage
+phía máy chủ.
+
+## Học online bằng GitHub
+
+Kho mã đã có cấu hình cho bốn luồng:
+
+- GitHub Pages phục vụ website tĩnh dưới prefix `/voai-lab/`;
+- Codespaces tạo VS Code trên web với Node 22 và Python 3.11; CI dùng bản Node
+  ghi trong `.nvmrc`;
+- trang `/notebooks/` mở tám notebook từ repository public bằng Colab;
+- GitHub Actions chạy lint, type-check, test, notebook/grader checks và build
+  Pages; workflow có thể khởi chạy ngay, nhưng chỉ deploy thành công sau khi
+  Pages được bật cho repository.
+
+Sự tồn tại của workflow không chứng minh một repository hoặc URL công khai đã
+được triển khai. Cần tạo repository public tên chính xác `voai-lab`, bật
+`Settings → Pages → Source: GitHub Actions` và đợi job **Deploy GitHub Pages**
+thành công. Xem lệnh, URL dự kiến và giới hạn của từng môi trường trong
+[Hướng dẫn học online bằng GitHub](docs/GITHUB_ONLINE.md).
 
 ## Dùng website
 
@@ -79,6 +98,7 @@ liệu hay object storage phía máy chủ.
 | `/lessons` | Tìm và đọc 78 bài thuật toán; mỗi bài đi từ trực giác tới thử thách tự code |
 | `/assessments` | Làm và lưu minh chứng thủ công cho từng phiên; pass dựa trên trường bắt buộc và điểm tự nhập, không tự chứng minh code đúng |
 | `/labs` | Dự đoán trước rồi thay tham số trong 6 mô phỏng: gradient descent, k-NN, convolution, attention, DFT và metrics |
+| `/notebooks` | Mở 8 notebook trên GitHub hoặc Colab; link chỉ trỏ đúng repository khi biến/repository Pages đã được xác định |
 | `/practice` | Viết Python, chạy test công khai rồi thử kiểm tra mù trong giao diện; các case vẫn xem được nếu đọc source/bundle |
 | `/resources` | Mở quy chế, đề cương, sách mở và tài liệu chính thức |
 
@@ -87,6 +107,11 @@ và 31 bài đa phương thức từ hai catalog TypeScript. Bản đọc dài t
 [lộ trình đầy đủ](docs/LO_TRINH_41_TUAN.md). Không đánh dấu hoàn thành chỉ vì đã
 đọc tiêu đề; bằng chứng là code, test, giải thích và nhật ký.
 
+`content/week-lectures.ts` ánh xạ mỗi trong 41 tuần tới các bài giảng khuyến
+nghị và `/roadmap` mở thẳng bài bằng `/lessons?lesson=<id>`. Đây là ánh xạ
+theo tuần, không phải quan hệ 1:1 giữa 205 phiên loại `lesson` và 78 bài giảng;
+outcome/kế hoạch của từng phiên vẫn là hợp đồng công việc cụ thể.
+
 Tiến độ và các attempt đánh giá nằm trong `localStorage` của đúng trình duyệt và origin đang
 dùng. Hãy bấm **Xuất tiến độ** tại `/roadmap` và **Xuất attempt JSON** tại
 `/assessments` định kỳ. Xóa dữ liệu website, đổi
@@ -94,11 +119,13 @@ trình duyệt hoặc đổi origin có thể làm mất bản đang lưu. Mã �
 `/practice` không được lưu tự động; hãy chép bài làm sang tệp cá nhân trước khi
 đổi bài hoặc tải lại trang.
 
-Ở `/practice`, lần đầu Pyodide tải từ CDN trong một trạng thái bootstrap riêng;
-thời gian này không tính vào giới hạn thực thi 8 giây. Mỗi lượt chạy dùng một
-Python namespace mới, nhưng Web Worker không cô lập mã thù địch như
-process/container. Các ca kiểm tra mù chỉ được giấu khỏi giao diện trước khi
-chạy và vẫn có thể đọc trong client source/bundle.
+Ở `/practice`, mỗi lần bấm chạy/nộp tạo một Web Worker mới và khởi tạo Pyodide
+từ CDN trong trạng thái bootstrap riêng; cache HTTP của trình duyệt có thể giảm
+lượng tải lại nhưng không biến nó thành cùng runtime. Thời gian bootstrap không
+tính vào giới hạn thực thi 8 giây. Worker bị terminate sau kết quả, lỗi hoặc
+timeout. Fresh Worker vẫn không cô lập mã thù địch như process/container. Các ca
+kiểm tra mù chỉ được giấu khỏi giao diện trước khi chạy và vẫn có thể đọc trong
+client source/bundle.
 
 Chi tiết quy trình học: [Hướng dẫn người học](docs/HUONG_DAN_NGUOI_HOC.md).
 
@@ -132,7 +159,9 @@ không đúng phần cứng.
 
 Mỗi notebook có ô `TODO`, visible tests và exit ticket. Quy trình đúng là
 **Restart kernel → Run All → tự hoàn thiện TODO → Run All lại từ đầu**. Lệnh sau
-chỉ kiểm tra cấu trúc của 8 tệp; nó không thực thi cell và không xác nhận đáp án:
+kiểm tra đúng bộ 8 tên tệp, JSON/metadata, cú pháp Python của từng code cell,
+không có execution history/output lưu sẵn và đủ các marker bài tập. Nó không
+thực thi cell, import dependency hay xác nhận đáp án/kết quả số:
 
 ```powershell
 py scripts/validate_notebooks.py
@@ -206,6 +235,8 @@ notebook để suy ra rằng toàn bộ bài học, cell notebook hay website đ
   Pyodide worker, CLI grader và giới hạn bảo mật.
 - [Tài nguyên hợp pháp](docs/TAI_NGUYEN_HOP_PHAP.md): nguồn chính thức, sách
   mở và checklist giấy phép cho code, model và dataset.
+- [Học online bằng GitHub](docs/GITHUB_ONLINE.md): repository public, Pages,
+  Codespaces, Colab, Actions và cách phân biệt cấu hình với deploy thật.
 
 ## Phạm vi xác minh cần hiểu đúng
 

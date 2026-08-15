@@ -118,7 +118,7 @@ Người học cần biết mình sẽ được kiểm tra về tính đúng, te
 
 | Phút | Hoạt động | Bằng chứng cần lưu |
 |---:|---|---|
-| 0–5 | Trả lời retrieval, không mở tài liệu | Câu trả lời có timestamp |
+| 0–5 | Trả lời retrieval, không mở tài liệu | Câu trả lời ban đầu trong tab/nhật ký; website hiện chưa ghi giờ bắt đầu |
 | 5–8 | Viết hợp đồng input/output/invariant | 3–6 dòng ghi chú |
 | 8–23 | Tự code và tự debug | Code, commit/draft và test log |
 | 23–27 | Chạy visible tests, đối chiếu criteria | Kết quả test và metric |
@@ -346,7 +346,7 @@ Không đưa test case thật vào `content/daily-assessments.ts`. Tệp content
 
 ## 11. Dữ liệu cần lưu cho một lần nộp
 
-Một attempt tối thiểu nên lưu:
+Một hệ thống chấm tích hợp đầy đủ nên lưu:
 
 - `assessmentId`, `sessionId`, `attemptNumber`;
 - thời điểm bắt đầu retrieval và thời điểm nộp;
@@ -361,23 +361,31 @@ Một attempt tối thiểu nên lưu:
 - root cause và retry link nếu trượt;
 - trạng thái `passed`, `mastery_due`, `mastered`.
 
+Đây là schema mục tiêu, không phải schema mà website hiện đã lưu đủ.
+`AssessmentExplorer` hiện chỉ lưu một `timestamp` khi bấm lưu attempt; nó
+không có `attemptNumber`, thời điểm bắt đầu retrieval, test log có cấu trúc,
+automatic-fail flags được máy phát hiện, lịch COACH-10 hay trạng thái mastery.
+Trường `noAutomaticFailConfirmed` chỉ là tự xác nhận của người học.
+
 Không dùng “thời gian gõ phím” hay detector AI mơ hồ làm bằng chứng duy nhất. Bằng chứng mạnh hơn là lịch sử draft, test tự viết, fresh implementation và oral defense nhất quán.
 
 ## 12. Luồng tích hợp website và grader
 
-Phiên bản website hiện có tại `/assessments` thực hiện phần formative ở phía trình duyệt: tìm/lọc đủ 290 phiên, mở sâu bằng `?session=<sessionId>`, thu retrieval/code evidence/link/explanation, tự chấm rubric, lưu từng attempt kèm timestamp/score/status và xuất JSON. Dữ liệu này riêng trên thiết bị; xóa dữ liệu trình duyệt sẽ làm mất attempts nếu chưa export.
+Phiên bản website hiện có tại `/assessments` thực hiện phần formative ở phía trình duyệt: tìm/lọc đủ 290 phiên, mở sâu bằng `?session=<sessionId>`, thu retrieval/code evidence/link/explanation, tự chấm rubric, lưu từng attempt kèm timestamp lúc bấm lưu/score/status và xuất JSON. UI không khóa retrieval, không ẩn coding task trước retrieval, không chạy code và không tự phát hiện automatic-fail. Dữ liệu này riêng trên thiết bị; xóa dữ liệu trình duyệt sẽ làm mất attempts nếu chưa export.
 
-Khi đọc `localStorage`, website không tin trực tiếp dữ liệu đã lưu. Mỗi record phải tham chiếu assessment/session hiện còn tồn tại; có đúng số retrieval answers; mọi chuỗi, mảng và boolean phải đúng kiểu; bốn score phải hữu hạn và nằm trong trọng số; tổng, threshold và status phải được tính lại khớp assessment hiện tại. Record bị sửa tay, lỗi schema, trùng ID hoặc đã lỗi thời bị loại khỏi thống kê và bản dữ liệu cục bộ được làm sạch.
+Khi đọc `localStorage`, website không tin trực tiếp dữ liệu đã lưu. Mỗi record phải tham chiếu assessment/session hiện còn tồn tại; có đúng số retrieval answers; mọi chuỗi, mảng và boolean phải đúng kiểu; bốn score phải hữu hạn và nằm trong trọng số; tổng, threshold và status phải được tính lại khớp assessment hiện tại. Record malformed, inconsistent, trùng ID hoặc đã lỗi thời bị loại khỏi thống kê và bản dữ liệu cục bộ được làm sạch. Tuy nhiên, một record bị sửa/forge mà vẫn tự nhất quán có thể qua validator vì localStorage không có chữ ký hay server authority; cơ chế này không chống gian lận.
 
-Luồng đề xuất:
+Luồng mục tiêu đề xuất, chưa phải toàn bộ hành vi hiện có:
 
 1. Website chọn assessment theo ngày hoặc `sessionId`.
-2. UI khóa retrieval answer trước khi hiện tài liệu/runner.
+2. UI mục tiêu khóa retrieval answer trước khi hiện tài liệu/runner; phiên bản
+   hiện tại cần người học tự giữ closed-book.
 3. UI hiện `codingTask`, `visibleCriteria`, `aiBoundary` và đồng hồ SOLO-90.
 4. Code runner chạy visible tests tại trình duyệt hoặc sandbox.
 5. Khi nộp, server/grader chạy test thật theo các nhóm đã công bố.
 6. UI yêu cầu explain prompt và có thể chọn câu oral defense.
-7. Scorer áp `scoreWeights`, `passRule` và automatic-fail.
+7. Scorer phía server áp `scoreWeights`, `passRule` và automatic-fail; phiên
+   bản hiện tại chỉ tính lại self-score và đọc ô tự xác nhận.
 8. Nếu pass, hệ thống lên lịch `delayedTransferCheck` từ `mastery`.
 9. Nếu trượt, hệ thống tạo attempt mới và giữ nguyên evidence cũ.
 

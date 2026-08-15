@@ -32,6 +32,13 @@ Tại thư mục dự án, làm theo phần
 Đừng cài thêm dependency ngẫu nhiên nếu `npm ci` và `npm run dev` chưa báo lỗi
 cần nó.
 
+Nếu học hoàn toàn online, làm theo
+[Hướng dẫn GitHub Pages, Codespaces, Colab và Actions](GITHUB_ONLINE.md).
+Chỉ dùng URL Pages sau khi workflow **Deploy GitHub Pages** của chính repository
+đã thành công; tệp workflow có sẵn không tự chứng minh website đang online.
+Codespaces phù hợp để chạy website/grader, còn Colab phù hợp cho notebook và có
+runtime tạm thời.
+
 ### Không gian bài làm cá nhân
 
 Không viết lời giải trực tiếp đè lên notebook mẫu nếu muốn giữ một bản sạch.
@@ -77,6 +84,7 @@ tuần nền tảng.
 | `/assessments` | Ghi retrieval, bằng chứng, giải thích và rubric thủ công cho từng phiên | Chạy code hoặc tự động xác nhận correctness |
 | `/lessons` | Học 78 bài chi tiết, quiz retrieval và lấy coding challenge | Chép đáp án hoặc thay thực nghiệm |
 | `/labs` | Tạo trực giác bằng dự đoán và thay một tham số | Kết luận model thật sẽ hoạt động tương tự |
+| `/notebooks` | Mở tám notebook từ repository public bằng Colab/GitHub | Giữ runtime, output hoặc dữ liệu riêng tư sau khi phiên Colab kết thúc |
 | `/practice` | Làm 5 bài code nhỏ và nhận feedback nhanh | Chấm toàn bộ 41 tuần hoặc giữ code lâu dài |
 | Notebook | Thí nghiệm, biểu đồ, pipeline và report có thể Run All | Chạy cell tùy thứ tự rồi gọi là tái lập |
 | Grader CLI | Chấm từ tiến trình sạch, public/private cases | Sandbox mã không tin cậy hoặc chống xem specs |
@@ -87,8 +95,10 @@ tuần nền tảng.
 1. **5 phút truy hồi:** từ phiên trên `/roadmap`, mở assessment tương ứng trong
    tab riêng và trả lời khi tài liệu còn đóng. Không đóng tab trước khi lưu vì
    draft chưa nộp không được autosave.
-2. **10 phút hiểu:** mở đúng bài trong `/lessons`, đọc mục tiêu, trực giác và
-   công thức. Tính tay một ví dụ nhỏ.
+2. **10 phút hiểu:** mở một bài trong nhóm **Bài giảng nên đọc trong tuần** của
+   `/roadmap`, rồi đối chiếu với outcome của phiên và đọc mục tiêu, trực giác,
+   công thức. Tính tay một ví dụ nhỏ. Đây là ánh xạ theo tuần, không phải mỗi
+   phiên trong 205 phiên bài học có riêng một bài giảng 1:1.
 3. **15 phút tự làm:** hoàn thành lát cắt nhỏ nhất trong `soloBuild` của
    `/roadmap`; code và ít nhất một test biên. Trước khi hết phiên, ghi bằng
    chứng, giải thích ngắn, tự chấm rubric và lưu attempt trên `/assessments`.
@@ -175,8 +185,10 @@ chứng formative/manual, không phải 290 chương trình chấm tự động.
 
 1. Mở phiếu từ link trong `/roadmap` hoặc tìm theo session, ngày, domain và loại
    phiên.
-2. Trả lời toàn bộ câu retrieval trước khi mở tài liệu. Nếu cần rời trang, ghi
-   câu trả lời vào nhật ký trước vì draft chưa bấm lưu chỉ nằm trong React state.
+2. Trả lời toàn bộ câu retrieval trước khi mở tài liệu. Giao diện hiện không
+   khóa ô retrieval, không ẩn coding task trước bước này và không ghi timestamp
+   bắt đầu; kỷ luật closed-book do người học tự giữ. Nếu cần rời trang, ghi câu
+   trả lời vào nhật ký vì draft chưa bấm lưu chỉ nằm trong React state.
 3. Tự làm code/notebook bên ngoài form; sau đó dán mô tả file/commit, lệnh chạy,
    test và kết quả vào **Bằng chứng code**. Link repository là tùy chọn.
 4. Viết phần giải thích bắt buộc bằng lời của mình: data flow/shape, lựa chọn,
@@ -235,11 +247,12 @@ phỏng trọng điểm, không phải simulator cho mọi bài trong catalog.
 6. Chỉ bấm **Nộp kiểm tra mù** khi test công khai và test tự viết đã đạt.
 7. Chép phiên bản đạt ra tệp rồi chấm lại bằng CLI từ process sạch.
 
-Lần đầu, worker tải Pyodide từ CDN và giao diện hiển thị trạng thái bootstrap
-riêng. Bộ đếm thực thi 8 giây chỉ bắt đầu sau khi runtime báo sẵn sàng. Mỗi lượt
-chạy tạo một Python global namespace mới rồi hủy namespace đó; runtime và cache
-module của worker vẫn có thể tồn tại giữa các lượt, nên đây không phải mức cô
-lập process/container. Dùng CLI khi cần một process mới cho từng case.
+Mỗi lần bấm chạy/nộp, giao diện terminate worker cũ nếu còn và tạo một Web
+Worker mới. Worker tải/khởi tạo Pyodide từ CDN trong trạng thái bootstrap riêng;
+cache HTTP có thể giảm lượng tải mạng nhưng mỗi lượt vẫn là runtime mới. Bộ đếm
+thực thi 8 giây chỉ bắt đầu sau khi runtime báo sẵn sàng, và worker bị terminate
+sau kết quả, lỗi hoặc timeout. Fresh Worker vẫn không phải mức cô lập
+process/container. Dùng CLI khi cần một process Python mới cho từng case.
 
 Các ca kiểm tra mù trên web chỉ không hiện trước trong giao diện; chúng vẫn nằm
 trong client source/bundle và có thể đọc được. Đây là rào cản luyện tập, không
@@ -247,6 +260,11 @@ phải bảo mật đề. Code Arena chỉ có 5 bài executable mẫu, không p
 chấm tự động cho 78 bài hay 290 assessment.
 
 ## 12. Dùng notebook đúng cách
+
+Có thể mở notebook từ bản sao cá nhân trên máy/Codespaces hoặc từ
+`/notebooks/` bằng Colab. Link Colab chỉ xác định đúng kho khi website biết
+`owner/voai-lab`; runtime Colab là tạm thời, vì vậy phải lưu bản làm vào nơi
+mình kiểm soát và không commit token/dữ liệu riêng tư.
 
 ### Trước khi code
 
@@ -272,8 +290,11 @@ chấm tự động cho 78 bài hay 290 assessment.
 5. đóng notebook, mở lại và đọc report như người chấm;
 6. hoàn thành exit ticket bằng lời của mình.
 
-Lệnh `py scripts/validate_notebooks.py` chỉ kiểm tra cấu trúc; dấu
-`Validated 8 notebooks` không chứng minh cell đã chạy hoặc bài làm đúng.
+Lệnh `py scripts/validate_notebooks.py` kiểm tra đúng bộ 8 tên tệp,
+JSON/metadata, AST Python của từng code cell, execution history/output phải
+trống và các marker `TODO`/`Visible tests`/`Exit ticket`. Dấu
+`Validated 8 notebooks` vẫn không chứng minh cell đã chạy, dependency hoạt
+động, test đạt hoặc bài làm đúng.
 
 ## 13. Dùng grader CLI đúng cách
 
@@ -395,8 +416,9 @@ lỗi import.
 
 Nếu đang ở trạng thái **Đang tải Python**, kiểm tra mạng tới jsDelivr; thời gian
 này không tính vào timeout thực thi. Nếu báo mã chạy quá 8 giây sau khi runtime
-đã sẵn sàng, kiểm tra vòng lặp và độ phức tạp. Reload để tạo worker mới rồi thử
-bài ngắn; nếu vẫn lỗi, dùng grader CLI và ghi rõ đây là fallback.
+đã sẵn sàng, kiểm tra vòng lặp và độ phức tạp. Thử lại bài ngắn; mỗi lượt thử
+vốn đã tạo worker mới nên reload không phải bước bắt buộc để làm sạch runtime.
+Nếu vẫn lỗi, dùng grader CLI và ghi rõ đây là fallback.
 
 ### Kết quả notebook đổi sau Run All
 

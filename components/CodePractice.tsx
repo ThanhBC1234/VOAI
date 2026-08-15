@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { InternalLink } from "./InternalLink";
+import { sitePath } from "../lib/site-path";
 
 type TestCase = { name: string; code: string };
 type Exercise = {
@@ -17,7 +19,7 @@ const exercises: Exercise[] = [
     constraints: ["Không dùng sum()", "O(n) thời gian", "O(1) bộ nhớ phụ", "Xử lý số âm và float"],
     examples: ["safe_mean([2, 4, 6]) → 4.0", "safe_mean([-2, 1]) → -0.5"],
     visible: [{name:"Ba số nguyên",code:"assert safe_mean([2, 4, 6]) == 4"},{name:"Số âm",code:"assert abs(safe_mean([-2, 1]) + 0.5) < 1e-9"}],
-    blind: [{name:"Một phần tử",code:"assert safe_mean([8.25]) == 8.25"},{name:"Danh sách rỗng",code:"\ntry:\n    safe_mean([])\n    assert False\nexcept ValueError:\n    pass"},{name:"Không dùng sum",code:"import inspect\nassert 'sum(' not in inspect.getsource(safe_mean)"}],
+    blind: [{name:"Một phần tử",code:"assert safe_mean([8.25]) == 8.25"},{name:"Danh sách rỗng",code:"\ntry:\n    safe_mean([])\n    assert False\nexcept ValueError:\n    pass"},{name:"Số thực",code:"assert abs(safe_mean([0.1, 0.2, 0.3]) - 0.2) < 1e-9"}],
   },
   {
     id:"linear-predict",domain:"Machine Learning",title:"Linear Regression — predict",level:"Cơ bản",
@@ -63,10 +65,9 @@ export function CodePractice() {
   const [status,setStatus]=useState<"idle"|"loading"|"running">("idle");
   const [result,setResult]=useState<RunResult|null>(null);
   const workerRef=useRef<Worker|null>(null);
-  const workerReadyRef=useRef(false);
   const timeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  useEffect(()=>()=>{ workerRef.current?.terminate(); workerReadyRef.current=false; if(timeoutRef.current) clearTimeout(timeoutRef.current); },[]);
+  useEffect(()=>()=>{ workerRef.current?.terminate(); if(timeoutRef.current) clearTimeout(timeoutRef.current); },[]);
 
   const selectExercise=(id:string)=>{
     const next=exercises.find(item=>item.id===id)!;
@@ -79,30 +80,32 @@ export function CodePractice() {
   const run=()=>{
     setResult(null);
     if(timeoutRef.current)clearTimeout(timeoutRef.current);
-    if(!workerRef.current){workerRef.current=new Worker("/pyodide-worker.js");workerReadyRef.current=false;}
-    const worker=workerRef.current; const requestId=crypto.randomUUID();
+    workerRef.current?.terminate();
+    const worker=new Worker(sitePath("/pyodide-worker.js"));workerRef.current=worker;
+    const requestId=crypto.randomUUID();
     const runExerciseId=exercise.id; const runMode=mode;
+    const disposeWorker=()=>{worker.terminate();if(workerRef.current===worker)workerRef.current=null;};
     let executionStarted=false;
     const startExecution=()=>{
       if(executionStarted)return;
       executionStarted=true;setStatus("running");
       worker.postMessage({type:"run",requestId,code,tests});
       timeoutRef.current=setTimeout(()=>{
-        worker.terminate();workerRef.current=null;workerReadyRef.current=false;setStatus("idle");
+        disposeWorker();setStatus("idle");
         setResult({ok:false,output:[],error:"Mã chạy quá 8 giây — kiểm tra vòng lặp vô hạn hoặc độ phức tạp. Thời gian tải Python không tính vào giới hạn này."});
       },8000);
     };
     worker.onmessage=(event)=>{
       if(event.data.type==="ready"){
-        workerReadyRef.current=true;startExecution();return;
+        startExecution();return;
       }
       if(event.data.type==="runtime-error"){
-        worker.terminate();workerRef.current=null;workerReadyRef.current=false;setStatus("idle");
+        disposeWorker();setStatus("idle");
         setResult({ok:false,output:[],error:`Không tải được Python: ${event.data.error}`});return;
       }
       if(event.data.type!=="result"||event.data.requestId!==requestId) return;
       if(timeoutRef.current) clearTimeout(timeoutRef.current);
-      setStatus("idle"); setResult(event.data);
+      disposeWorker();setStatus("idle");setResult(event.data);
       if(runMode==="blind"&&event.data.details?.every((item:{passed:boolean})=>item.passed)){
         const current=JSON.parse(localStorage.getItem("voai-progress")||"{}");
         current[runExerciseId]={passedAt:new Date().toISOString(),solo:true};
@@ -111,10 +114,10 @@ export function CodePractice() {
     };
     worker.onerror=()=>{
       if(timeoutRef.current)clearTimeout(timeoutRef.current);
-      worker.terminate();workerRef.current=null;workerReadyRef.current=false;setStatus("idle");
+      disposeWorker();setStatus("idle");
       setResult({ok:false,output:[],error:"Web Worker gặp lỗi khi tải hoặc chạy Python."});
     };
-    if(workerReadyRef.current)startExecution();else{setStatus("loading");worker.postMessage({type:"init"});}
+    setStatus("loading");worker.postMessage({type:"init"});
   };
 
   const lines=useMemo(()=>Array.from({length:Math.max(12,code.split("\n").length)},(_,i)=>i+1),[code]);
@@ -126,7 +129,7 @@ export function CodePractice() {
       <aside className="exercise-list">
         <div><span>BỘ BÀI TẬP MẪU</span><strong>{exercises.length} bài đã mở</strong></div>
         {exercises.map((item,index)=><button className={item.id===exercise.id?"active":""} key={item.id} onClick={()=>selectExercise(item.id)} disabled={status!=="idle"}><span>{String(index+1).padStart(2,"0")}</span><div><strong>{item.title}</strong><small>{item.domain} · {item.level}</small></div></button>)}
-        <a href="/roadmap">Xem bài theo lộ trình →</a>
+        <InternalLink href="/roadmap">Xem bài theo lộ trình →</InternalLink>
       </aside>
       <section className="exercise-workspace">
         <div className="problem-pane">

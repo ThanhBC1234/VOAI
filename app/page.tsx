@@ -1,3 +1,7 @@
+import { InternalLink } from "../components/InternalLink";
+
+export const dynamic = "force-static";
+
 const phases = [
   { label: "Nền tảng", range: "Tuần 01–04", tone: "mint" },
   { label: "Machine Learning", range: "Tuần 05–14", tone: "sky" },
@@ -20,8 +24,8 @@ export default function Home() {
             tự cài đặt trước khi dùng thư viện và biến kiến thức thành dự án AI hoàn chỉnh.
           </p>
           <div className="hero-actions">
-            <a className="primary-button" href="/roadmap">Bắt đầu Ngày 1 <span>→</span></a>
-            <a className="text-link" href="/roadmap">Xem toàn bộ 41 tuần</a>
+            <InternalLink className="primary-button" href="/roadmap">Bắt đầu Ngày 1 <span>→</span></InternalLink>
+            <InternalLink className="text-link" href="/roadmap">Xem toàn bộ 41 tuần</InternalLink>
           </div>
           <div className="commitment">
             <span className="commitment-number">90%</span>
@@ -48,7 +52,7 @@ export default function Home() {
             <li><span>02</span><strong>Tự code trong Lab</strong><small>25 phút</small></li>
             <li><span>03</span><strong>Kiểm tra không gợi ý</strong><small>10 phút</small></li>
           </ul>
-          <a className="lesson-button" href="/lessons">Vào bài học <span>↗</span></a>
+          <InternalLink className="lesson-button" href="/lessons">Vào bài học <span>↗</span></InternalLink>
         </aside>
       </section>
 
