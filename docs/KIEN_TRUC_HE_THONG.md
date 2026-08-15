@@ -122,7 +122,9 @@ trúc dữ liệu, không chấm bài người học.
 - hai xác nhận SOLO-90 và không vi phạm automatic-fail.
 
 Khi submit, client suy ra `incomplete`, `needs-revision` hoặc `passed` từ các
-trường bắt buộc và tổng điểm người học tự nhập so với threshold. Đây là
+trường bắt buộc, tổng điểm người học tự nhập so với threshold và sàn điểm của
+từng hạng mục trong `minimumSectionScores`. Điểm cao ở một phần không thể bù
+cho retrieval/coding/validation/explanation dưới sàn. Đây là
 formative/manual evidence: route không thực thi code, không mở/xác minh link và
 không tự chứng minh correctness. Một session có thể giữ nhiều attempt; nút xuất
 tạo `voai-assessment-attempts.json`. Draft chưa submit chỉ ở React state và mất
@@ -201,15 +203,17 @@ nhận và trạng thái tự đánh giá. Ví dụ rút gọn:
     "soloConfirmed": true,
     "noAutomaticFailConfirmed": true,
     "score": 75,
-    "threshold": 75,
+    "threshold": 70,
     "status": "passed"
   }
 ]
 ```
 
-`passed` ở đây chỉ có nghĩa các trường bắt buộc/xác nhận đã có và tổng điểm tự
-nhập đạt threshold. Component không chạy code, không xác minh evidence và không
-ngăn sửa localStorage. Nút **Xuất attempts JSON** tạo
+`passed` ở đây chỉ có nghĩa các trường bắt buộc/xác nhận đã có, tổng điểm tự
+nhập đạt threshold và cả bốn hạng mục đạt sàn tương ứng. Khi tải lại, component
+đối chiếu assessment/session hiện hành, timestamp, score, threshold, status và
+loại record sai cấu trúc; cơ chế này vẫn không làm localStorage trở thành bằng
+chứng chống sửa. Component không chạy code hoặc xác minh evidence. Nút **Xuất attempts JSON** tạo
 `voai-assessment-attempts.json`; giao diện chưa có import/merge.
 
 ### `voai-progress`
