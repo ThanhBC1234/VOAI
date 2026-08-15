@@ -32,7 +32,7 @@ export function NotebookHub() {
     <section className="notebook-hub" aria-label="Danh sách notebook Colab">
       <div className="notebook-notice">
         <strong>Mở trực tiếp từ GitHub Pages</strong>
-        <p>Hai nút bên dưới tự dùng tên chủ repository khi website chạy tại <code>username.github.io/voai-lab</code>. Ở bản local hoặc bản xem trước chưa biết repository, Colab mở bộ chọn GitHub còn nút nguồn mở trang GitHub.</p>
+        <p>Hai nút bên dưới tự dùng tên chủ repository khi website chạy tại <code>owner.github.io/voai-lab</code>. Ở bản local hoặc bản xem trước chưa biết repository, Colab mở bộ chọn GitHub còn nút nguồn mở trang GitHub.</p>
       </div>
       <div className="notebook-grid">
         {NOTEBOOKS.map((notebook, index) => (

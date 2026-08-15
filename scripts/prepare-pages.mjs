@@ -10,6 +10,7 @@ const routeNames = [
   "practice",
   "resources",
   "roadmap",
+  "theory",
 ];
 
 if (!fs.existsSync(path.join(outputDirectory, "index.html"))) {
@@ -43,4 +44,6 @@ for (const routeName of routeNames) {
 }
 
 fs.writeFileSync(path.join(outputDirectory, ".nojekyll"), "", "utf8");
-console.log("Prepared GitHub Pages artifact for /voai-lab/ (8 pages + 404).");
+console.log(
+  `Prepared GitHub Pages artifact for /voai-lab/ (${routeNames.length + 1} pages + 404).`,
+);

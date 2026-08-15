@@ -1,5 +1,9 @@
 # Học VOAI Lab trực tuyến bằng GitHub
 
+Nếu đây là lần đầu sử dụng, hãy đọc bản hướng dẫn theo từng thao tác tại
+[Bắt đầu sử dụng VOAI Lab](BAT_DAU_SU_DUNG.md). Tài liệu hiện tại là phần tham
+chiếu chi tiết hơn về kiến trúc online và giới hạn của từng môi trường.
+
 Tài liệu này dành cho repository công khai có tên chính xác là `voai-lab`. Bộ mã
 nguồn dùng bốn môi trường bổ sung cho nhau:
 
@@ -21,11 +25,11 @@ git status --short
 git log -1 --oneline
 ```
 
-Sau khi các thay đổi cần phát hành đã nằm trong commit, thay
-`<GITHUB_USERNAME>` bằng tên tài khoản rồi chạy:
+Sau khi các thay đổi cần phát hành đã nằm trong commit, thay `<GITHUB_OWNER>`
+bằng đúng owner cá nhân hoặc organization rồi chạy:
 
 ```powershell
-git remote add origin https://github.com/<GITHUB_USERNAME>/voai-lab.git
+git remote add origin https://github.com/<GITHUB_OWNER>/voai-lab.git
 git branch -M main
 git push -u origin main
 ```
@@ -48,7 +52,7 @@ khi gọi dự án là mã nguồn mở; không thêm một giấy phép ngẫu 
 Khi workflow thành công, địa chỉ mặc định là:
 
 ```text
-https://<GITHUB_USERNAME>.github.io/voai-lab/
+https://<GITHUB_OWNER>.github.io/voai-lab/
 ```
 
 Artifact chứa HTML thật cho trang chủ và từng route. Nó không dùng mẹo chuyển
@@ -94,7 +98,7 @@ Trang `/notebooks/` trên GitHub Pages tạo liên kết Colab từ chính biế
 của Colab là:
 
 ```text
-https://colab.research.google.com/github/<GITHUB_USERNAME>/voai-lab/blob/main/notebooks/<TEN_NOTEBOOK>.ipynb
+https://colab.research.google.com/github/<GITHUB_OWNER>/voai-lab/blob/main/notebooks/<TEN_NOTEBOOK>.ipynb
 ```
 
 Google lưu ý rằng máy ảo Colab không đi kèm khi chia sẻ notebook. Nếu notebook

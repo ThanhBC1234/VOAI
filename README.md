@@ -11,13 +11,18 @@ VOAI/IOAI.
 IOAI**. Quy chế và đề cương chính thức luôn có quyền ưu tiên; xem các nguồn đang
 được tuyển chọn tại `/resources`.
 
+> **Bắt đầu ở đây:** làm theo [Hướng dẫn đăng GitHub và sử dụng VOAI Lab](docs/BAT_DAU_SU_DUNG.md).
+> Tài liệu đi từ lúc tạo repository đến buổi học đầu tiên trên Pages, Codespaces
+> và Colab.
+
 ## Trong kho mã có gì?
 
 | Thành phần | Nội dung hiện có |
 | --- | --- |
-| Website vinext | Trang chủ, lộ trình 41 tuần, 78 bài giảng, 290 phiếu đánh giá, 6 lab tương tác, 5 bài code mẫu và thư viện tài nguyên |
+| Website vinext | Trang chủ, lộ trình 41 tuần, 78 bài giảng, ngân hàng lý thuyết vòng 1, 290 phiếu đánh giá, 6 lab tương tác, 5 bài code mẫu và thư viện tài nguyên |
 | Lộ trình | 290 phiên liên tục: 205 bài, 41 lab, 41 checkpoint và 3 phiên tổng kết |
 | Giáo trình thuật toán | 47 bài lõi + 31 bài đa phương thức: trực giác, toán, phần lõi from-scratch khi phù hợp, pipeline/eval cho pretrained model, lỗi thường gặp, quiz và thử thách code |
+| Lý thuyết vòng 1 | 350 câu phủ 60/60 mục syllabus IOAI và 5 nhóm nền tảng bổ sung, với bốn mức độ và bốn dạng câu hiện có; kèm blueprint đề mock 100 câu trong 180 phút |
 | Notebook | 8 notebook có ô trống và visible tests; không chứa lời giải hoàn chỉnh |
 | Bộ đánh giá | 290 phiếu lưu minh chứng và rubric thủ công; phòng code Pyodide cùng CLI Python có 5 bài luyện mẫu |
 | Tài liệu vận hành | Quy tắc SOLO-90, hướng dẫn người học, kiến trúc và lộ trình chi tiết |
@@ -96,6 +101,7 @@ thành công. Xem lệnh, URL dự kiến và giới hạn của từng môi tr�
 | `/` | Bắt đầu và xem triết lý học 30–60 phút/ngày |
 | `/roadmap` | Lọc 41 tuần, mở kế hoạch từng phiên, đánh dấu hoàn thành, xem ma trận IOAI và xuất tiến độ JSON |
 | `/lessons` | Tìm và đọc 78 bài thuật toán; mỗi bài đi từ trực giác tới thử thách tự code |
+| `/theory` | Luyện 350 câu lý thuyết theo khối và mức độ, hoặc làm đề mock 100 câu có đồng hồ 180 phút và bóc tách điểm theo khối |
 | `/assessments` | Làm và lưu minh chứng thủ công cho từng phiên; pass dựa trên trường bắt buộc và điểm tự nhập, không tự chứng minh code đúng |
 | `/labs` | Dự đoán trước rồi thay tham số trong 6 mô phỏng: gradient descent, k-NN, convolution, attention, DFT và metrics |
 | `/notebooks` | Mở 8 notebook trên GitHub hoặc Colab; link chỉ trỏ đúng repository khi biến/repository Pages đã được xác định |
@@ -113,7 +119,7 @@ theo tuần, không phải quan hệ 1:1 giữa 205 phiên loại `lesson` và 7
 outcome/kế hoạch của từng phiên vẫn là hợp đồng công việc cụ thể.
 
 Tiến độ và các attempt đánh giá nằm trong `localStorage` của đúng trình duyệt và origin đang
-dùng. Hãy bấm **Xuất tiến độ** tại `/roadmap` và **Xuất attempt JSON** tại
+dùng. Hãy bấm **Xuất tiến độ** tại `/roadmap` và **Xuất attempts JSON** tại
 `/assessments` định kỳ. Xóa dữ liệu website, đổi
 trình duyệt hoặc đổi origin có thể làm mất bản đang lưu. Mã đang gõ tại
 `/practice` không được lưu tự động; hãy chép bài làm sang tệp cá nhân trước khi
@@ -229,6 +235,8 @@ notebook để suy ra rằng toàn bộ bài học, cell notebook hay website đ
   một tuần, notebook, lab và mock.
 - [Quy tắc SOLO-90](docs/QUY_TAC_SOLO_90.md): ranh giới dùng AI, rubric 100
   điểm, nhật ký và lịch ôn.
+- [Lý thuyết vòng 1](docs/LY_THUYET_VONG_1.md): ngân hàng 350 câu, ba trục phân
+  loại, blueprint đề mock 100 câu và nguồn hiệu chỉnh theo đề công khai.
 - [Hệ thống đánh giá](docs/HE_THONG_DANH_GIA.md): 290 phiếu 1:1, điều kiện
   pass/mastery, minh chứng và ranh giới giữa chấm thủ công với test tự động.
 - [Kiến trúc hệ thống](docs/KIEN_TRUC_HE_THONG.md): luồng dữ liệu, lưu tiến độ,

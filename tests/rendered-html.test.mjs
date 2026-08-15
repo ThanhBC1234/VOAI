@@ -35,6 +35,7 @@ test("all learning routes render their product-specific surface", async () => {
     ["/assessments", /Đánh giá 290 phiên — VOAI Lab/, /Mỗi ngày học kết thúc/],
     ["/lessons", /78 bài giảng thuật toán — VOAI Lab/, /CATALOG IOAI 2026/],
     ["/labs", /Phòng lab tương tác — VOAI Lab/, /Đừng chỉ đọc công thức/],
+    ["/theory", /Lý thuyết vòng 1 — VOAI Lab/, /Vòng 1 hỏi lý thuyết/],
     ["/practice", /Tự code &amp; chấm bài — VOAI Lab/, /SOLO·90 CODE ARENA/],
     ["/resources", /Tài nguyên học hợp pháp — VOAI Lab/, /Không sách lậu, không link rác/],
     ["/notebooks", /Notebook Colab — VOAI Lab/, /Tám notebook có khung/],
@@ -184,4 +185,14 @@ test("runtime learning tools state their timing and visibility boundaries honest
   assert.doesNotMatch(roadmapSource, /toISOString\(\)\.slice/);
   assert.match(roadmapSource, /Deep \{session\.deepMinutes\}:/);
   assert.doesNotMatch(roadmapSource, /Deep 60:/);
+});
+
+test("theory mock auto-submits at zero and offers a clean retry", async () => {
+  const source = await readFile(new URL("../components/TheoryExam.tsx", import.meta.url), "utf8");
+  assert.match(source, /function hasCompleteResponse\(/);
+  assert.match(source, /question\.statements\.every/);
+  assert.match(source, /const answered = hasCompleteResponse\(question, response\)/);
+  assert.match(source, /current <= 1[\s\S]{0,160}submitExamRef\.current\(\)/);
+  assert.match(source, /function restartExam\(\)/);
+  assert.match(source, /Làm lại đề mẫu/);
 });

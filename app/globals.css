@@ -214,3 +214,71 @@ h1 em { color: #307b59; font-family: Georgia, serif; font-weight: 500; }
 .notebook-actions button.ghost { background:transparent;color:var(--ink); }
 .notebook-actions button:hover { transform:translateY(-1px); }
 @media (max-width: 800px) { .notebook-grid { grid-template-columns:1fr; }.notebook-notice { grid-template-columns:1fr; }.notebook-card>p { min-height:0; } }
+
+/* ---------- /theory: ngân hàng lý thuyết và đề mock vòng 1 ---------- */
+.theory-hero { display:grid;grid-template-columns:1.6fr 1fr;gap:48px;align-items:start; }
+.theory-app { padding:44px 7vw 90px; }
+.theory-modes { display:flex;gap:8px;margin-bottom:26px; }
+.theory-modes button { padding:12px 20px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font:800 11px/1 var(--font-geist-mono),monospace;letter-spacing:.08em;text-transform:uppercase; }
+.theory-modes button.active { border-color:var(--ink);background:var(--ink);color:#fff; }
+.theory-toolbar { display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:26px; }
+.theory-toolbar input,.theory-toolbar select { padding:12px 14px;border:1px solid var(--line);background:transparent;color:var(--ink);font-size:13px; }
+.theory-toolbar input { flex:1;min-width:220px; }
+.theory-count { color:var(--muted);font:700 11px/1 var(--font-geist-mono),monospace; }
+.theory-list { display:grid;gap:18px; }
+.theory-card { padding:24px;border:1px solid var(--line);background:#fbfbf7; }
+.theory-meta { display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:14px;color:var(--muted);font:700 10px/1 var(--font-geist-mono),monospace;letter-spacing:.06em;text-transform:uppercase; }
+.theory-index { color:var(--ink); }
+.theory-points { margin-left:auto; }
+.theory-level { padding:4px 8px;border:1px solid currentColor; }
+.theory-level.lv-recall { color:#4a7c59; }
+.theory-level.lv-understand { color:#2f6f8f; }
+.theory-level.lv-apply { color:#8a5a2b; }
+.theory-level.lv-advanced { color:#93331f; }
+.theory-card h3 { margin:0 0 18px;font-size:17px;font-weight:650;line-height:1.55;letter-spacing:-.01em; }
+.theory-choices { display:grid;gap:8px; }
+.theory-choices button { display:flex;gap:12px;align-items:flex-start;padding:13px 15px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;text-align:left;font-size:14px;line-height:1.5; }
+.theory-choices button.picked { border-color:var(--ink);background:#eef0e6; }
+.theory-choices button:disabled { cursor:default;opacity:.85; }
+.theory-choices button>span { min-width:18px;font:800 12px/1.5 var(--font-geist-mono),monospace; }
+.theory-choices button>em { font-style:normal; }
+.theory-tf { display:grid;gap:12px; }
+.theory-tf>div { display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid var(--line); }
+.theory-tf p { flex:1;min-width:240px;margin:0;font-size:14px;line-height:1.55; }
+.theory-tf>div>div { display:flex;gap:6px; }
+.theory-tf button { padding:8px 16px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;font-size:12px;font-weight:700; }
+.theory-tf button.picked { border-color:var(--ink);background:var(--ink);color:#fff; }
+.theory-input { display:flex;gap:10px;align-items:center; }
+.theory-input input { flex:1;max-width:320px;padding:12px 14px;border:1px solid var(--line);background:transparent;color:var(--ink);font:650 15px/1 var(--font-geist-mono),monospace; }
+.theory-hint { margin:10px 0 0;color:var(--muted);font-size:12px;line-height:1.6; }
+.theory-reveal { margin-top:16px;padding:11px 18px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase; }
+.theory-reveal:disabled { border-color:var(--line);color:var(--muted);cursor:not-allowed; }
+.theory-review { margin-top:18px;padding:18px;border-left:3px solid var(--line);background:#f2f3ec; }
+.theory-review.ok { border-left-color:#4a7c59; }
+.theory-review.no { border-left-color:#93331f; }
+.theory-review>strong { display:block;margin-bottom:12px;font:800 12px/1 var(--font-geist-mono),monospace;letter-spacing:.08em; }
+.theory-review p { margin:12px 0 0;font-size:13px;line-height:1.7; }
+.theory-review small { display:block;margin-top:12px;color:var(--muted);font-size:11px;line-height:1.6; }
+.theory-notes { margin:0;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.7; }
+.theory-notes li.is-answer { color:var(--ink); }
+.theory-calc { margin:12px 0 0;padding-left:18px;font:650 12px/1.75 var(--font-geist-mono),monospace; }
+.theory-answer-line { font-size:13px; }
+.theory-trap { padding:10px 12px;border:1px dashed #93331f;color:#93331f; }
+.theory-start { max-width:760px;padding:32px;border:1px solid var(--line);background:#fbfbf7; }
+.theory-start h2 { margin:0 0 16px;font-size:26px;letter-spacing:-.03em; }
+.theory-start p { margin:0 0 14px;color:var(--muted);font-size:14px;line-height:1.7; }
+.theory-last { color:var(--ink) !important; }
+.theory-hud { position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-bottom:22px;padding:14px 18px;border:1px solid var(--ink);background:#fbfbf7; }
+.theory-hud>span:first-child { font:800 22px/1 var(--font-geist-mono),monospace; }
+.theory-hud>span:first-child.urgent { color:#93331f; }
+.theory-hud>span { color:var(--muted);font-size:12px;font-weight:700; }
+.theory-hud button { margin-left:auto;padding:11px 22px;border:1px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase; }
+.theory-result { margin-bottom:26px;padding:26px;border:1px solid var(--ink);background:#eef0e6; }
+.theory-score { display:flex;flex-wrap:wrap;gap:16px;align-items:baseline;margin-bottom:20px; }
+.theory-score strong { font-size:52px;letter-spacing:-.05em; }
+.theory-score span { color:var(--muted);font-size:14px; }
+.theory-score em { margin-left:auto;font:800 11px/1 var(--font-geist-mono),monospace;letter-spacing:.08em;text-transform:uppercase; }
+.theory-breakdown h3 { margin:18px 0 10px;font:800 11px/1 var(--font-geist-mono),monospace;letter-spacing:.08em;text-transform:uppercase; }
+.theory-breakdown p { display:flex;gap:16px;justify-content:space-between;margin:0;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px; }
+.theory-breakdown p.weak { color:#93331f;font-weight:700; }
+@media (max-width: 900px) { .theory-hero { grid-template-columns:1fr; }.theory-app { padding:32px 6vw 70px; }.theory-score strong { font-size:40px; }.theory-score em { margin-left:0; } }

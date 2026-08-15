@@ -39,6 +39,9 @@ yarn-error.log*
 /outputs/
 /work/
 
+# local assistant launch configuration; not part of the public learning product
+/.claude/
+
 # generated local caches
 *.py[cod]
 __pycache__/

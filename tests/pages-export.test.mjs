@@ -14,6 +14,7 @@ const routes = [
   ["practice", /Tự code &amp; chấm bài — VOAI Lab/],
   ["resources", /Tài nguyên học hợp pháp — VOAI Lab/],
   ["notebooks", /Notebook Colab — VOAI Lab/],
+  ["theory", /Lý thuyết vòng 1 — VOAI Lab/],
 ];
 const expectedPrerenderRoutes = [
   "/",
@@ -25,6 +26,7 @@ const expectedPrerenderRoutes = [
   "/practice",
   "/resources",
   "/roadmap",
+  "/theory",
 ];
 
 async function exists(filePath) {
@@ -73,7 +75,7 @@ function artifactPathFor(reference) {
   return filePath;
 }
 
-test("Vinext prerender manifest reports all nine routes as rendered", async () => {
+test("Vinext prerender manifest reports every route as rendered", async () => {
   const manifestPath = path.resolve("dist", "server", "vinext-prerender.json");
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   assert.ok(manifest && typeof manifest === "object" && !Array.isArray(manifest));
