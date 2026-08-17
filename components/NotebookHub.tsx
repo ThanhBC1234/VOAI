@@ -3,12 +3,19 @@
 import { NOTEBOOKS } from "../content/notebooks";
 
 const configuredRepository = process.env.NEXT_PUBLIC_GITHUB_REPOSITORY ?? "";
+/**
+ * Tên repository suy từ base path đã cấu hình (`site.config.mjs` → biến môi
+ * trường `NEXT_PUBLIC_BASE_PATH`). Chỉ dùng khi workflow chưa truyền
+ * `NEXT_PUBLIC_GITHUB_REPOSITORY`, ví dụ bản dựng cục bộ.
+ */
+const repositoryNameFromBasePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").replace(/^\//, "");
 
 function repositoryFromPage(): string | null {
   if (configuredRepository.includes("/")) return configuredRepository;
   if (typeof window === "undefined") return null;
   const match = window.location.hostname.match(/^([^.]+)\.github\.io$/i);
-  return match ? `${match[1]}/voai-lab` : null;
+  if (!match || !repositoryNameFromBasePath) return null;
+  return `${match[1]}/${repositoryNameFromBasePath}`;
 }
 
 function openNotebook(file: string) {
@@ -32,7 +39,7 @@ export function NotebookHub() {
     <section className="notebook-hub" aria-label="Danh sách notebook Colab">
       <div className="notebook-notice">
         <strong>Mở trực tiếp từ GitHub Pages</strong>
-        <p>Hai nút bên dưới tự dùng tên chủ repository khi website chạy tại <code>owner.github.io/voai-lab</code>. Ở bản local hoặc bản xem trước chưa biết repository, Colab mở bộ chọn GitHub còn nút nguồn mở trang GitHub.</p>
+        <p>Hai nút bên dưới tự dùng tên chủ repository khi website chạy tại <code>owner.github.io/&lt;repo&gt;</code>. Ở bản local hoặc bản xem trước chưa biết repository, Colab mở bộ chọn GitHub còn nút nguồn mở trang GitHub.</p>
       </div>
       <div className="notebook-grid">
         {NOTEBOOKS.map((notebook, index) => (

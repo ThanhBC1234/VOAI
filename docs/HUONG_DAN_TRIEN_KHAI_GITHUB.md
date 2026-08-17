@@ -9,11 +9,17 @@ Mỗi phần ghi rõ **cần cài gì**, **chạy lệnh nào**, và **dấu hi�
 đã đúng**. Nếu một bước không cho đúng dấu hiệu đó, đừng đi tiếp — mục 9 liệt kê
 cách xử lý từng lỗi thường gặp.
 
-> **Điều kiện chốt cứng:** repository phải tên đúng `voai-lab`, để chế độ
-> **public**, nhánh chính `main`. Đường dẫn cơ sở `/voai-lab` được ghi cứng ở
-> năm nơi (`next.config.ts`, `scripts/run-vinext.mjs`, `scripts/prepare-pages.mjs`,
-> `tests/pages-export.test.mjs`, `components/NotebookHub.tsx`). Đặt tên khác mà
-> chưa sửa cả năm chỗ thì **toàn bộ CSS, JavaScript và ảnh sẽ trả 404**.
+> **Điều kiện chốt cứng:** repository phải để chế độ **public**, nhánh chính
+> `main`, và tên phải khớp giá trị trong `site.config.mjs` — hiện là `VOAI`.
+>
+> Tên repository chỉ khai báo ở **đúng một dòng** trong `site.config.mjs`; mọi
+> nơi khác (`next.config.ts`, hai script build, bộ test, `NotebookHub`) đều đọc
+> từ đó. Đổi tên repository ⇒ sửa dòng đó rồi chạy lại
+> `npm run build:pages && npm run test:pages`.
+>
+> **Phân biệt hoa/thường:** URL của GitHub Pages phân biệt hoa thường, nên giá
+> trị trong `site.config.mjs` phải khớp **chính xác** tên trên GitHub. Lệch một
+> chữ hoa là **toàn bộ CSS, JavaScript và ảnh trả 404**.
 
 ---
 
@@ -90,8 +96,8 @@ lại sửa, đừng push.
 | --- | --- | --- | --- |
 | 1 | `npm run lint` | Quy tắc mã nguồn và React | Không in ra lỗi nào |
 | 2 | `npm exec tsc -- --noEmit` | Kiểu TypeScript | Không in ra gì |
-| 3 | `npm test` | Build rồi chạy 53 test Node | `pass 53`, `fail 0` |
-| 4 | `npm run build:pages` | Dựng bản tĩnh cho Pages | `Prepared GitHub Pages artifact for /voai-lab/ (10 pages + 404)` |
+| 3 | `npm test` | Build rồi chạy 54 test Node | `pass 54`, `fail 0` |
+| 4 | `npm run build:pages` | Dựng bản tĩnh cho Pages | `Prepared GitHub Pages artifact for /VOAI/ (10 pages + 404)` |
 | 5 | `npm run test:pages` | Artifact tĩnh đúng hợp đồng | `pass 5`, `fail 0` |
 | 6 | `npm run test:grader` | CLI grader | `Ran 17 tests … OK` |
 | 7 | `npm run test:notebooks` | Bộ test của chính validator | `Ran 12 tests … OK` |
@@ -127,7 +133,7 @@ không được commit.
 
 1. Mở <https://github.com/new>.
 2. **Owner:** chọn đúng tài khoản của bạn.
-3. **Repository name:** gõ chính xác `voai-lab`.
+3. **Repository name:** gõ chính xác `VOAI`.
 4. Chọn **Public**.
 5. **Không** tích tạo sẵn `README`, `.gitignore` hay `LICENSE` — chúng sẽ tạo một
    commit đầu tiên xung đột với lịch sử Git trên máy bạn.
@@ -146,7 +152,7 @@ làm cá nhân, ghi chú riêng hay tệp nháp.
 git add -A
 git commit -m "VOAI Lab: bản đầy đủ"
 git branch -M main
-git remote add origin https://github.com/<TÊN_TÀI_KHOẢN>/voai-lab.git
+git remote add origin https://github.com/<TÊN_TÀI_KHOẢN>/VOAI.git
 git push -u origin main
 ```
 
@@ -175,7 +181,7 @@ Nếu bỏ qua bước này, workflow `Deploy GitHub Pages` sẽ chạy tới b�
 3. Khi cả hai đều có dấu ✓ (thường 5–10 phút), mở:
 
 ```text
-https://<TÊN_TÀI_KHOẢN>.github.io/voai-lab/
+https://<TÊN_TÀI_KHOẢN>.github.io/VOAI/
 ```
 
 **Dấu hiệu đúng:** trang chủ hiện đủ màu và bố cục, không phải chữ đen trên nền
@@ -183,21 +189,22 @@ trắng trơ trọi. Chữ trơ trọi nghĩa là CSS bị 404 — xem mục 9.1
 
 ---
 
-## 5. Kiểm tra website đã lên: đi hết 9 trang
+## 5. Kiểm tra website đã lên: đi hết 10 trang
 
 Mở lần lượt và đối chiếu:
 
 | Đường dẫn | Phải thấy gì | Thử ngay tại chỗ |
 | --- | --- | --- |
-| `/voai-lab/` | Trang chủ, tiêu đề “Đi từ dòng Python đầu tiên…” | Bấm **Bắt đầu Ngày 1** |
-| `/voai-lab/roadmap/` | 41 tuần + khối Tổng kết, thanh tiến độ `0/290 phiên` | Mở một tuần, tích một phiên, tải lại trang — dấu tích còn nguyên |
-| `/voai-lab/lessons/` | `78/78 bài`, bộ lọc theo lĩnh vực | Chọn một bài, mở tab **Toán**, làm một câu quiz |
-| `/voai-lab/math/` | 5 module · 23 chủ đề · 69 bài luyện | Nhập đáp án một bài luyện rồi bấm **Đối chiếu** |
-| `/voai-lab/theory/` | Ngân hàng 350 câu, nút vào đề mock 180 phút | Bắt đầu đề mock, tải lại trang — đồng hồ và đáp án còn nguyên |
-| `/voai-lab/assessments/` | `290/290 phiên`, phiếu đầu tiên hiện đủ đề bài | Bấm sang một phiên ở tuần khác — đề bài hiện sau chưa tới một giây |
-| `/voai-lab/labs/` | 6 phòng lab có canvas vẽ được | Kéo thanh trượt, hình phải đổi theo |
-| `/voai-lab/notebooks/` | 8 notebook kèm nút mở Colab | Bấm **Mở trên Colab** ở notebook 00 |
-| `/voai-lab/practice/` | Code Arena với 5 bài | Xem mục 6.3 |
+| `/VOAI/` | Trang chủ, tiêu đề “Đi từ dòng Python đầu tiên…” | Bấm **Bắt đầu Ngày 1** |
+| `/VOAI/roadmap/` | 41 tuần + khối Tổng kết, thanh tiến độ `0/290 phiên` | Mở một tuần, tích một phiên, tải lại trang — dấu tích còn nguyên |
+| `/VOAI/lessons/` | `78/78 bài`, bộ lọc theo lĩnh vực | Chọn một bài, mở tab **Toán**, làm một câu quiz |
+| `/VOAI/math/` | 5 module · 23 chủ đề · 69 bài luyện | Nhập đáp án một bài luyện rồi bấm **Đối chiếu** |
+| `/VOAI/theory/` | Ngân hàng 350 câu, nút vào đề mock 180 phút | Bắt đầu đề mock, tải lại trang — đồng hồ và đáp án còn nguyên |
+| `/VOAI/assessments/` | `290/290 phiên`, phiếu đầu tiên hiện đủ đề bài | Bấm sang một phiên ở tuần khác — đề bài hiện sau chưa tới một giây |
+| `/VOAI/labs/` | 6 phòng lab có canvas vẽ được | Kéo thanh trượt, hình phải đổi theo |
+| `/VOAI/notebooks/` | 8 notebook kèm nút mở Colab | Bấm **Mở trên Colab** ở notebook 00 |
+| `/VOAI/practice/` | Code Arena với 5 bài | Xem mục 6.3 |
+| `/VOAI/resources/` | Danh mục nguồn học hợp pháp | Mở một liên kết bất kỳ |
 
 Tiến độ ở Roadmap, Toán, Lý thuyết, Assessment và Code Arena được lưu trong
 **localStorage của chính trình duyệt đó**. Đổi máy, đổi trình duyệt hoặc xoá dữ
@@ -213,8 +220,8 @@ liệu website là mất. Muốn giữ lâu dài thì bấm nút **Xuất … JS
 npm run dev
 ```
 
-Mở <http://localhost:3000>. Ở chế độ này **không có** tiền tố `/voai-lab`, nên
-địa chỉ là `http://localhost:3000/math` chứ không phải `/voai-lab/math`.
+Mở <http://localhost:3000>. Ở chế độ này **không có** tiền tố `/VOAI`, nên
+địa chỉ là `http://localhost:3000/math` chứ không phải `/VOAI/math`.
 
 Dừng bằng `Ctrl` + `C`.
 
@@ -225,13 +232,13 @@ npm run build:pages
 ```
 
 Bản tĩnh nằm ở `dist/client/`. Muốn mở thử, phải phục vụ nó **dưới đúng thư mục
-`voai-lab`**, nếu không mọi đường dẫn sẽ lệch:
+`VOAI`**, nếu không mọi đường dẫn sẽ lệch:
 
 ```bash
-mkdir -p .preview/voai-lab && cp -r dist/client/* .preview/voai-lab/ && python -m http.server 8080 --directory .preview
+mkdir -p .preview/VOAI && cp -r dist/client/* .preview/VOAI/ && python -m http.server 8080 --directory .preview
 ```
 
-Rồi mở <http://localhost:8080/voai-lab/>. Xong thì xoá `.preview`.
+Rồi mở <http://localhost:8080/VOAI/>. Xong thì xoá `.preview`.
 
 ### 6.3. Code Arena — Python chạy thẳng trong trình duyệt
 
@@ -337,9 +344,18 @@ Nếu `CI` đỏ, **đừng bỏ qua**. Bản trên Pages sẽ giữ nguyên phi
 
 ### 9.1. Website lên nhưng không có định dạng, hoặc ảnh 404
 
-Repository không tên `voai-lab`. Hoặc đổi lại tên repository, hoặc sửa cả năm
-chỗ ghi cứng `/voai-lab` đã liệt kê ở đầu tài liệu. Đổi tên repository là cách
-nhanh và ít rủi ro hơn nhiều.
+Tên repository trên GitHub không khớp `REPOSITORY_NAME` trong `site.config.mjs`
+— kể cả chỉ lệch hoa/thường, vì URL Pages phân biệt hoa thường.
+
+Sửa một trong hai cho khớp nhau, rồi chạy lại:
+
+```bash
+npm run build:pages && npm run test:pages
+```
+
+Bài kiểm tra `every local HTML asset and navigation reference is base-prefixed
+and exists` sẽ đỏ ngay tại máy nếu hai bên còn lệch, nên bạn không cần đợi tới
+lúc deploy mới biết.
 
 ### 9.2. Workflow `Deploy GitHub Pages` hỏng ở bước `deploy`
 
@@ -393,10 +409,10 @@ hưởng tới bản dựng.
 - [ ] `npm ci` chạy xong không lỗi
 - [ ] `python -m pip install -r requirements-notebooks.txt` chạy xong
 - [ ] Cả 9 lệnh ở mục 3 đều xanh
-- [ ] Repository tên chính xác `voai-lab`, để **public**, nhánh `main`
+- [ ] Repository tên chính xác `VOAI`, để **public**, nhánh `main`
 - [ ] `public/data/assessments/`, `dist/`, `node_modules/` **không** bị commit
 - [ ] Settings → Pages → Source = **GitHub Actions**
 - [ ] Cả hai workflow trong tab Actions đều ✓
-- [ ] Mở được `https://<tài-khoản>.github.io/voai-lab/` và trang có định dạng đầy đủ
+- [ ] Mở được `https://<tài-khoản>.github.io/VOAI/` và trang có định dạng đầy đủ
 - [ ] Đi hết 9 trang ở mục 5, mỗi trang thử được ít nhất một thao tác
 - [ ] Code Arena chạy được một bài và báo “Đạt”

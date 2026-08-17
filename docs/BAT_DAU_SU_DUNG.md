@@ -1,7 +1,7 @@
 # Bắt đầu sử dụng VOAI Lab
 
 Đây là hướng dẫn ngắn nhất để đưa VOAI Lab lên GitHub rồi bắt đầu học. Cấu hình
-hiện tại giả định repository **public**, tên chính xác `voai-lab`, nhánh chính
+hiện tại giả định repository **public**, tên chính xác `VOAI`, nhánh chính
 `main`. Không đổi tên repository nếu chưa sửa lại cấu hình Pages và liên kết
 Colab trong mã nguồn.
 
@@ -25,7 +25,7 @@ hoặc Colab khi cần code; quay lại Pages để làm assessment và đánh d
 
 1. Đăng nhập GitHub và mở <https://github.com/new>.
 2. Chọn đúng tài khoản ở mục **Owner**.
-3. Đặt **Repository name** là `voai-lab`.
+3. Đặt **Repository name** là `VOAI`.
 4. Chọn **Public**.
 5. Không chọn tạo sẵn `README`, `.gitignore` hoặc `LICENSE`, vì tạo initial
    commit trên GitHub có thể gây xung đột với lịch sử Git đã có trên máy. Kho
@@ -72,7 +72,7 @@ Thay `<GITHUB_OWNER>` bằng đúng giá trị **Owner** đã chọn ở bước
 (tài khoản cá nhân hoặc organization):
 
 ```powershell
-git remote add origin https://github.com/<GITHUB_OWNER>/voai-lab.git
+git remote add origin https://github.com/<GITHUB_OWNER>/VOAI.git
 git branch -M main
 git push -u origin main
 ```
@@ -80,7 +80,7 @@ git push -u origin main
 Nếu Git báo `remote origin already exists`, không thêm lần nữa; dùng:
 
 ```powershell
-git remote set-url origin https://github.com/<GITHUB_OWNER>/voai-lab.git
+git remote set-url origin https://github.com/<GITHUB_OWNER>/VOAI.git
 git push -u origin main
 ```
 
@@ -116,13 +116,13 @@ organization phải bật quyền phù hợp.
 Khi deploy thành công, website mặc định là:
 
 ```text
-https://<GITHUB_OWNER>.github.io/voai-lab/
+https://<GITHUB_OWNER>.github.io/VOAI/
 ```
 
 Mở thêm đường dẫn sau để xác nhận phần lý thuyết mới đã lên đúng bản:
 
 ```text
-https://<GITHUB_OWNER>.github.io/voai-lab/theory/
+https://<GITHUB_OWNER>.github.io/VOAI/theory/
 ```
 
 ---
@@ -194,7 +194,7 @@ Luôn đối chiếu trang **Tài nguyên** khi Ban Tổ chức công bố quy c
 
 ### Tạo Codespace
 
-1. Mở repository `voai-lab` trên GitHub.
+1. Mở repository `VOAI` trên GitHub.
 2. Chọn **Code** → **Codespaces** → **Create codespace on main**.
 3. Chờ quá trình cài Node và Python hoàn tất.
 4. Trong terminal của Codespaces, chạy:
@@ -271,21 +271,21 @@ Website lưu tiến độ trong trình duyệt hiện tại, không có tài kho
 
 | Hiện tượng | Cách kiểm tra |
 | --- | --- |
-| Pages báo 404 toàn bộ | Tên repository phải là `voai-lab`; Pages Source phải là **GitHub Actions**; workflow deploy phải xanh |
+| Pages báo 404 toàn bộ | Tên repository phải là `VOAI`; Pages Source phải là **GitHub Actions**; workflow deploy phải xanh |
 | Có website nhưng thiếu **Lý thuyết** | Kiểm tra `app/theory/` và `content/theory/` đã có trong commit trên GitHub; chạy lại deploy |
 | Action đầu tiên màu đỏ | Bật Pages trước, sau đó chạy lại **Deploy GitHub Pages**; mở log nếu CI cũng đỏ |
 | Codespaces không mở website | Chạy `npm run dev`, vào tab **Ports**, mở cổng `3000` |
-| Nút Colab mở sai repository | Dùng bản GitHub Pages, giữ đúng tên repo `voai-lab`, chế độ public và nhánh `main` |
+| Nút Colab mở sai repository | Dùng bản GitHub Pages, giữ đúng tên repo `VOAI`, chế độ public và nhánh `main` |
 | Code Arena tải lâu | Cần mạng để tải Pyodide; mỗi lượt chạy dùng runtime mới để tránh trạng thái Python bẩn |
 | Tiến độ biến mất ở máy khác | Đây là dữ liệu `localStorage`; dùng các nút export và lưu file sao lưu |
 
 ## Checklist hoàn tất
 
-- [ ] Repository `voai-lab` ở chế độ public.
+- [ ] Repository `VOAI` ở chế độ public.
 - [ ] Nhánh `main` có route `app/theory/` và đủ 8 notebook.
 - [ ] Workflow **CI** màu xanh.
 - [ ] Workflow **Deploy GitHub Pages** màu xanh.
-- [ ] Mở được `/voai-lab/roadmap/` và `/voai-lab/theory/`.
+- [ ] Mở được `/VOAI/roadmap/` và `/VOAI/theory/`.
 - [ ] Tạo được Codespace và chạy `npm run dev`.
 - [ ] Mở được một notebook bằng Colab.
 - [ ] Hoàn thành phiên đầu tiên và xuất thử tệp tiến độ.

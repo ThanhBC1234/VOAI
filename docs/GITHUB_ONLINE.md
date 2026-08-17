@@ -4,7 +4,7 @@ Nếu đây là lần đầu sử dụng, hãy đọc bản hướng dẫn theo 
 [Bắt đầu sử dụng VOAI Lab](BAT_DAU_SU_DUNG.md). Tài liệu hiện tại là phần tham
 chiếu chi tiết hơn về kiến trúc online và giới hạn của từng môi trường.
 
-Tài liệu này dành cho repository công khai có tên chính xác là `voai-lab`. Bộ mã
+Tài liệu này dành cho repository công khai có tên chính xác là `VOAI`. Bộ mã
 nguồn dùng bốn môi trường bổ sung cho nhau:
 
 | Môi trường | Dùng cho việc gì | Giới hạn cần nhớ |
@@ -16,7 +16,7 @@ nguồn dùng bốn môi trường bổ sung cho nhau:
 
 ## 1. Đưa mã nguồn lên repository public
 
-Tạo một repository **public**, để trống, tên chính xác `voai-lab`. Trước khi
+Tạo một repository **public**, để trống, tên chính xác `VOAI`. Trước khi
 thêm remote, kiểm tra commit sẽ phát hành; không dùng `git add .` một cách mù
 quáng nếu thư mục còn draft hoặc bài làm cá nhân:
 
@@ -29,7 +29,7 @@ Sau khi các thay đổi cần phát hành đã nằm trong commit, thay `<GITHU
 bằng đúng owner cá nhân hoặc organization rồi chạy:
 
 ```powershell
-git remote add origin https://github.com/<GITHUB_OWNER>/voai-lab.git
+git remote add origin https://github.com/<GITHUB_OWNER>/VOAI.git
 git branch -M main
 git push -u origin main
 ```
@@ -52,16 +52,16 @@ khi gọi dự án là mã nguồn mở; không thêm một giấy phép ngẫu 
 Khi workflow thành công, địa chỉ mặc định là:
 
 ```text
-https://<GITHUB_OWNER>.github.io/voai-lab/
+https://<GITHUB_OWNER>.github.io/VOAI/
 ```
 
 Artifact chứa HTML thật cho trang chủ và từng route. Nó không dùng mẹo chuyển
 hướng `404.html` để giả lập SPA. Vì vậy các địa chỉ như
-`/voai-lab/roadmap/`, `/voai-lab/lessons/` và
-`/voai-lab/assessments/?session=w01-lab` vẫn mở được sau khi tải lại trang.
+`/VOAI/roadmap/`, `/VOAI/lessons/` và
+`/VOAI/assessments/?session=w01-lab` vẫn mở được sau khi tải lại trang.
 
 Workflow triển khai lấy URL thật từ `actions/configure-pages`, đặt đúng metadata
-chia sẻ, build với prefix `/voai-lab`, kiểm artifact rồi mới phát hành. Các
+chia sẻ, build với prefix `/VOAI`, kiểm artifact rồi mới phát hành. Các
 GitHub Action trong repository được khóa theo commit SHA đã đối chiếu với tag
 chính thức; Dependabot theo dõi cả npm, pip và GitHub Actions.
 
@@ -98,7 +98,7 @@ Trang `/notebooks/` trên GitHub Pages tạo liên kết Colab từ chính biế
 của Colab là:
 
 ```text
-https://colab.research.google.com/github/<GITHUB_OWNER>/voai-lab/blob/main/notebooks/<TEN_NOTEBOOK>.ipynb
+https://colab.research.google.com/github/<GITHUB_OWNER>/VOAI/blob/main/notebooks/<TEN_NOTEBOOK>.ipynb
 ```
 
 Google lưu ý rằng máy ảo Colab không đi kèm khi chia sẻ notebook. Nếu notebook
@@ -133,15 +133,15 @@ quyền triển khai.
   cụ luyện tập, không phải bí mật chấm thi.
 - GitHub Pages không chạy `grader/grade.py`. Hãy dùng Code Arena cho năm bài mẫu,
   Codespaces cho grader đầy đủ và Colab cho notebook.
-- Nếu đổi tên repository, phải đổi đồng thời prefix `/voai-lab` trong cấu hình,
+- Nếu đổi tên repository, phải đổi đồng thời prefix `/VOAI` trong cấu hình,
   workflow, test và tài liệu trước khi triển khai lại.
 
 ## 7. Xử lý lỗi thường gặp
 
 | Hiện tượng | Kiểm tra |
 | --- | --- |
-| Pages báo 404 toàn site | Repository có tên `voai-lab`; Pages Source là GitHub Actions; workflow deploy đã xanh |
-| Trang mở nhưng CSS/JS lỗi 404 | Artifact test phải xanh và URL phải chứa đúng một lần `/voai-lab/` |
+| Pages báo 404 toàn site | Repository có tên `VOAI`; Pages Source là GitHub Actions; workflow deploy đã xanh |
+| Trang mở nhưng CSS/JS lỗi 404 | Artifact test phải xanh và URL phải chứa đúng một lần `/VOAI/` |
 | Tải lại route con bị 404 | Kiểm workflow đã upload bản build mới có `route/index.html`, không phải `dist` cũ |
 | Code Arena không tải Python | Kiểm tra mạng có truy cập `cdn.jsdelivr.net`; thử tải lại sau khi hủy cache lỗi |
 | Colab không mở notebook | Repository phải public; nhánh là `main`; tên file trong URL phải khớp chính xác |

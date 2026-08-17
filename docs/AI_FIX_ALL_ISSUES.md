@@ -521,7 +521,7 @@ Test/kiểm tra bắt buộc:
   - `app/layout.tsx:13-15,31-33`
   - `tests/rendered-html.test.mjs:6,28,49`
 - Hiện trạng: khi thiếu `NEXT_PUBLIC_SITE_URL`, metadata trỏ tới
-  `https://voai-lab-2027.dixmilsapin.chatgpt.site/og.png`; kiểm tra ẩn danh ngày
+  `https://VOAI-2027.dixmilsapin.chatgpt.site/og.png`; kiểm tra ẩn danh ngày
   15/08/2026 nhận HTTP 401. Test chỉ kiểm chuỗi nên vẫn xanh. Pages không bị vì
   workflow truyền URL riêng.
 - Yêu cầu sửa:
@@ -538,7 +538,7 @@ Test/kiểm tra bắt buộc:
   - `components/CodePractice.tsx:84`
 - Hiện trạng: tài liệu ghi `new Worker("/pyodide-worker.js")`, trong khi code đúng
   dùng `sitePath("/pyodide-worker.js")`. URL root trong tài liệu sẽ 404 trên
-  `/voai-lab/` của GitHub Pages.
+  `/VOAI/` của GitHub Pages.
 - Yêu cầu sửa: cập nhật snippet và giải thích base path; snippet trong docs phải
   phản ánh code thực tế và vượt link/render check.
 

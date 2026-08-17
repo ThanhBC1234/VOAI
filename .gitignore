@@ -50,3 +50,11 @@ __pycache__/
 # PERF-P3-01: chunk chi tiết assessment được sinh từ content/ trong mọi lần
 # chạy scripts/run-vinext.mjs. Commit chúng sẽ tạo hai nguồn sự thật.
 /public/data/assessments/
+
+# Tệp khoá tạm của Microsoft Office, sinh ra khi mở .docx/.xlsx và biến mất khi
+# đóng. Chúng đã từng lọt vào một commit.
+~$*
+
+
+# Thư mục xem thử bản tĩnh dưới đúng base path; chỉ dùng cục bộ.
+/.preview/

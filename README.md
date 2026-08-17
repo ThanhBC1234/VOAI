@@ -80,7 +80,7 @@ phía máy chủ.
 
 Kho mã đã có cấu hình cho bốn luồng:
 
-- GitHub Pages phục vụ website tĩnh dưới prefix `/voai-lab/`;
+- GitHub Pages phục vụ website tĩnh dưới prefix `/VOAI/`;
 - Codespaces tạo VS Code trên web với Node 22 và Python 3.11; CI dùng bản Node
   ghi trong `.nvmrc`;
 - trang `/notebooks/` mở tám notebook từ repository public bằng Colab;
@@ -89,7 +89,7 @@ Kho mã đã có cấu hình cho bốn luồng:
   Pages được bật cho repository.
 
 Sự tồn tại của workflow không chứng minh một repository hoặc URL công khai đã
-được triển khai. Cần tạo repository public tên chính xác `voai-lab`, bật
+được triển khai. Cần tạo repository public tên chính xác `VOAI`, bật
 `Settings → Pages → Source: GitHub Actions` và đợi job **Deploy GitHub Pages**
 thành công. Xem lệnh, URL dự kiến và giới hạn của từng môi trường trong
 [Hướng dẫn học online bằng GitHub](docs/GITHUB_ONLINE.md).

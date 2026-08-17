@@ -24,9 +24,9 @@ import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import path from "node:path";
+import { BASE_PATH } from "../site.config.mjs";
 
 const ARTIFACT_ROOT = path.resolve("dist", "client");
-const BASE_PATH = "/voai-lab";
 const DEFAULT_ROUTES = ["assessments", "theory", "roadmap", "lessons"];
 
 /**

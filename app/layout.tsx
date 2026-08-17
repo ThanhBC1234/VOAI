@@ -19,7 +19,7 @@ export const dynamic = "force-static";
  * `github.repository_owner`, Pages dùng `configure-pages`), nên fallback chỉ là
  * lưới an toàn cho bản dựng cục bộ — và vẫn phải là URL ai cũng mở được.
  */
-const DEFAULT_PUBLIC_SITE_URL = "https://ditruyenhungvuong.github.io/voai-lab";
+const DEFAULT_PUBLIC_SITE_URL = "https://thanhbc1234.github.io/VOAI";
 const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_PUBLIC_SITE_URL;
 const metadataBase = new URL(publicSiteUrl);
 const socialImage = new URL(sitePath("/og.png"), metadataBase).toString();

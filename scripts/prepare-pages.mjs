@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { BASE_PATH, REPOSITORY_NAME } from "../site.config.mjs";
 
 const outputDirectory = path.resolve("dist", "client");
 const routeNames = [
@@ -18,7 +19,7 @@ if (!fs.existsSync(path.join(outputDirectory, "index.html"))) {
   throw new Error("GitHub Pages export is missing dist/client/index.html");
 }
 
-const prefixedAssetDirectory = path.join(outputDirectory, "voai-lab", "_next");
+const prefixedAssetDirectory = path.join(outputDirectory, REPOSITORY_NAME, "_next");
 const publicAssetDirectory = path.join(outputDirectory, "_next");
 if (fs.existsSync(prefixedAssetDirectory)) {
   if (fs.existsSync(publicAssetDirectory)) {
@@ -46,5 +47,5 @@ for (const routeName of routeNames) {
 
 fs.writeFileSync(path.join(outputDirectory, ".nojekyll"), "", "utf8");
 console.log(
-  `Prepared GitHub Pages artifact for /voai-lab/ (${routeNames.length + 1} pages + 404).`,
+  `Prepared GitHub Pages artifact for ${BASE_PATH}/ (${routeNames.length + 1} pages + 404).`,
 );

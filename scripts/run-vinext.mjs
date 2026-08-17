@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { emitAssessmentChunks } from "./emit-assessment-chunks.mjs";
+import { BASE_PATH } from "../site.config.mjs";
 
 const requestedMode = process.argv[2];
 if (!new Set(["dev", "build", "start", "pages"]).has(requestedMode)) {
@@ -38,7 +39,7 @@ const child = spawn(executable, cliArguments, {
     ...(requestedMode === "pages"
       ? {
           GITHUB_PAGES: "true",
-          NEXT_PUBLIC_BASE_PATH: "/voai-lab",
+          NEXT_PUBLIC_BASE_PATH: BASE_PATH,
           NEXT_PUBLIC_SITE_URL:
             process.env.NEXT_PUBLIC_SITE_URL ?? "https://example.github.io",
         }

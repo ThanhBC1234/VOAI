@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { BASE_PATH, REPOSITORY_NAME } from "../site.config.mjs";
 
 const artifactRoot = path.resolve("dist", "client");
-const basePath = "/voai-lab";
+const basePath = BASE_PATH;
 const routes = [
   ["", /VOAI Lab — Lộ trình AI từ nền tảng đến thi đấu/],
   ["roadmap", /Lộ trình 290 ngày — VOAI Lab/],
@@ -97,7 +98,11 @@ test("Pages export contains real route documents, RSC companions, and a real 404
   assert.ok(await exists(path.join(artifactRoot, "_next")), "Missing root _next assets");
   assert.ok(await exists(path.join(artifactRoot, ".nojekyll")), "Missing .nojekyll");
   assert.equal((await stat(path.join(artifactRoot, ".nojekyll"))).size, 0);
-  assert.equal(await exists(path.join(artifactRoot, "voai-lab")), false, "Artifact must deploy from its root, not a nested voai-lab directory");
+  assert.equal(
+    await exists(path.join(artifactRoot, REPOSITORY_NAME)),
+    false,
+    `Artifact must deploy from its root, not a nested ${REPOSITORY_NAME} directory`,
+  );
 
   for (const [route, title] of routes) {
     const routeDirectory = route ? path.join(artifactRoot, route) : artifactRoot;
@@ -134,7 +139,7 @@ test("every local HTML asset and navigation reference is base-prefixed and exist
       await assertExactCase(target);
     }
   }
-  assert.ok(nextAssetReferences > 0, "No /voai-lab/_next asset references were found");
+  assert.ok(nextAssetReferences > 0, `No ${basePath}/_next asset references were found`);
 });
 
 // PERF-P3-01: chunk chi tiết assessment không nằm trong HTML nên không được test
@@ -178,10 +183,12 @@ test("Pages metadata, assessment links, and browser worker retain the repository
   const assessments = await readFile(path.join(artifactRoot, "assessments", "index.html"), "utf8");
   const worker = await readFile(path.join(artifactRoot, "pyodide-worker.js"), "utf8");
 
-  assert.match(home, /https:\/\/[^/"']+\/voai-lab\/og\.png/);
+  assert.match(home, new RegExp(`https://[^/"']+${basePath}/og\\.png`));
   assert.doesNotMatch(home, /dixmilsapin\.chatgpt\.site/);
-  assert.match(roadmap, /href="\/voai-lab\/assessments\/\?session=w01-lesson-1"/);
-  assert.match(roadmap, /href="\/voai-lab\/lessons\/\?lesson=foundation-python"/);
+  // `\\?` chứ không phải `\?`: đây là template literal nên một dấu gạch chéo bị
+  // chuỗi nuốt mất, và regex sẽ hiểu `?` là "ký tự trước không bắt buộc".
+  assert.match(roadmap, new RegExp(`href="${basePath}/assessments/\\?session=w01-lesson-1"`));
+  assert.match(roadmap, new RegExp(`href="${basePath}/lessons/\\?lesson=foundation-python"`));
   assert.equal((assessments.match(/data-assessment-item=/g) ?? []).length, 290);
   assert.match(assessments, /id="assessment-w01-lesson-1"/);
   // SUPPLY-P3-01: phiên bản vẫn được pin, ưu tiên bản cùng origin, và script
@@ -211,5 +218,9 @@ test("Pages metadata, assessment links, and browser worker retain the repository
   }
   const clientBundle = JavaScript.join("\n");
   assert.match(clientBundle, /pyodide-worker\.js/, "Practice bundle does not reference the worker");
-  assert.match(clientBundle, /voai-lab/, "Client bundle does not contain the configured Pages base path");
+  assert.match(
+    clientBundle,
+    new RegExp(REPOSITORY_NAME),
+    "Client bundle does not contain the configured Pages base path",
+  );
 });

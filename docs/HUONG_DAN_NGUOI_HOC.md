@@ -263,7 +263,7 @@ chấm tự động cho 78 bài hay 290 assessment.
 
 Có thể mở notebook từ bản sao cá nhân trên máy/Codespaces hoặc từ
 `/notebooks/` bằng Colab. Link Colab chỉ xác định đúng kho khi website biết
-`owner/voai-lab`; runtime Colab là tạm thời, vì vậy phải lưu bản làm vào nơi
+`owner/VOAI`; runtime Colab là tạm thời, vì vậy phải lưu bản làm vào nơi
 mình kiểm soát và không commit token/dữ liệu riêng tư.
 
 ### Trước khi code

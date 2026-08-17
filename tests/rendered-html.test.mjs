@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import test from "node:test";
+import { REPOSITORY_NAME } from "../site.config.mjs";
 
 const clean = (html) => html.replaceAll("<!-- -->", "");
 // SEO-P3-01: ảnh OG phải nằm trên một origin công khai (không cần đăng nhập)
 // và luôn đi kèm base path của bản dựng.
-const socialImage = /https:\/\/[a-z0-9.-]+\/(?:voai-lab\/)?og\.png/;
+//
+// Tên repository có thể chứa chữ hoa nên lớp ký tự phải nhận cả hai. Dấu chấm
+// của ".png" cần hai dấu gạch chéo: đây là template literal, nên một dấu sẽ bị
+// chuỗi nuốt mất và regex thành "og.png" với dấu chấm khớp mọi ký tự.
+const socialImage = new RegExp(`https://[A-Za-z0-9.-]+/(?:${REPOSITORY_NAME}/)?og\\.png`);
 
 async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);

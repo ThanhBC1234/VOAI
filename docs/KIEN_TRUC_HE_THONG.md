@@ -66,7 +66,7 @@ tự đánh dấu một phiên lộ trình.
 | Notebook | `notebooks/*.ipynb` | 8 bài thực hành có TODO, visible tests và exit ticket |
 | Grader CLI | `grader/grade.py`, `grader/worker.py`, `grader/specs.json` | Chạy từng case trong subprocess và tính tối đa 45 điểm correctness |
 | Build/runtime | `vite.config.ts`, `worker/index.ts`, `scripts/run-vinext.mjs` | vinext, Vite, Cloudflare worker và lệnh dev/build/start |
-| Học/deploy GitHub | `.devcontainer/`, `.github/workflows/`, `next.config.ts`, `scripts/prepare-pages.mjs` | Codespaces, CI và artifact tĩnh cho repository `voai-lab` |
+| Học/deploy GitHub | `.devcontainer/`, `.github/workflows/`, `next.config.ts`, `scripts/prepare-pages.mjs` | Codespaces, CI và artifact tĩnh cho repository `VOAI` |
 | Dữ liệu máy chủ | `db/`, `.openai/hosting.json` | Khung D1 tùy chọn; hiện chưa có bảng và chưa bật binding |
 
 `content/curriculum.ts` tự kiểm tra các invariant khi module được nạp: đúng 41
@@ -100,7 +100,7 @@ Bản phát hành GitHub tĩnh không cài CLI migration và không giữ
 cấu hình tương ứng và kiểm tra workflow triển khai trước khi tạo hoặc áp dụng SQL.
 
 Khi `GITHUB_PAGES=true`, `next.config.ts` bật static export và asset prefix
-`/voai-lab`; `scripts/prepare-pages.mjs` kiểm đủ route rồi tạo cấu trúc
+`/VOAI`; `scripts/prepare-pages.mjs` kiểm đủ route rồi tạo cấu trúc
 `route/index.html` cùng `.nojekyll`. Workflow trong `.github/workflows/`
 chạy các cổng chất lượng và có job deploy Pages; `.devcontainer/` cấu hình
 Codespaces. Đây là năng lực có trong source, không phải bằng chứng repository đã
@@ -356,7 +356,7 @@ Luồng một lần bấm **Chạy test/Nộp bài**:
 
 1. `CodePractice` terminate worker cũ nếu còn rồi tạo một worker mới cho mỗi lần
    bấm chạy/nộp bằng `new Worker(sitePath("/pyodide-worker.js"))`. Bắt buộc đi
-   qua `sitePath()`: trên GitHub Pages site nằm dưới `/voai-lab/`, nên đường dẫn
+   qua `sitePath()`: trên GitHub Pages site nằm dưới `/VOAI/`, nên đường dẫn
    gốc `"/pyodide-worker.js"` sẽ trả 404.
 2. Nếu runtime chưa sẵn sàng, main thread gửi `init` và hiển thị trạng thái tải
    Python riêng.

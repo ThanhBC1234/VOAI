@@ -306,9 +306,11 @@ Kiểm tra bổ sung đã chạy:
 
 ## 8. Trước khi đẩy lên GitHub
 
-- Repo **phải đặt tên đúng `voai-lab`**. Base path bị chốt cứng ở 5 chỗ
-  (`next.config.ts`, `run-vinext.mjs`, `prepare-pages.mjs`,
-  `pages-export.test.mjs`, `NotebookHub.tsx`); tên khác sẽ 404 toàn bộ asset.
+- Tên repository khai báo ở **một nơi duy nhất**: `site.config.mjs`. Hiện là
+  `VOAI`. `next.config.ts`, `run-vinext.mjs`, `prepare-pages.mjs`,
+  `measure-payload.mjs`, `NotebookHub.tsx` và bộ test đều đọc từ đó. Đổi tên
+  repo ⇒ sửa một dòng rồi chạy lại `npm run build:pages && npm run test:pages`.
+  URL Pages **phân biệt hoa/thường**, nên giá trị phải khớp chính xác.
 - **Settings → Pages → Source = "GitHub Actions"**, nếu không job `deploy` sẽ lỗi.
 - Cả 6 action đã pin SHA và đã đối chiếu với upstream bằng `git ls-remote`; đều
   chạy trên runtime Node 24.

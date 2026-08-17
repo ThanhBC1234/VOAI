@@ -70,7 +70,7 @@ jobs:
       - name: Build the GitHub Pages artifact
         run: npm run build:pages
         env:
-          NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/voai-lab
+          NEXT_PUBLIC_SITE_URL: https://${{ github.repository_owner }}.github.io/VOAI
           NEXT_PUBLIC_GITHUB_REPOSITORY: ${{ github.repository }}
 
       - name: Validate the GitHub Pages artifact
