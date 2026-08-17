@@ -1,11 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Be_Vietnam_Pro, Geist_Mono } from "next/font/google";
 import { SiteHeader } from "../components/SiteHeader";
 import { sitePath } from "../lib/site-path";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+// Be Vietnam Pro: thiết kế riêng cho tiếng Việt, dấu thanh đặt chuẩn, nhiều
+// độ đậm — hợp với giao diện navy/teal kiểu Scam-Shield. Giữ tên biến
+// `--font-geist-sans` để không phải sửa hàng trăm chỗ trong CSS.
+const geistSans = Be_Vietnam_Pro({
+  variable: "--font-geist-sans",
+  weight: ["400", "500", "600", "700", "800"],
+  subsets: ["latin", "vietnamese"],
+  display: "swap",
+});
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const dynamic = "force-static";
