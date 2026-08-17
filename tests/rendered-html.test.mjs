@@ -47,6 +47,7 @@ test("all learning routes render their product-specific surface", async () => {
     ["/resources", /Tài nguyên học hợp pháp — VOAI Lab/, /Không sách lậu, không link rác/],
     ["/notebooks", /Notebook Colab — VOAI Lab/, /Tám notebook có khung/],
     ["/math", /Toán cho VOAI — VOAI Lab/, /Toán không phải môn phụ ở đây/],
+    ["/huong-dan", /Hướng dẫn sử dụng — VOAI Lab/, /Tất cả trong một trang/],
   ];
   for (const [path, title, copy] of routes) {
     const response = await render(path);

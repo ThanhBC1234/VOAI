@@ -17,11 +17,13 @@ const routes = [
   ["notebooks", /Notebook Colab — VOAI Lab/],
   ["theory", /Lý thuyết vòng 1 — VOAI Lab/],
   ["math", /Toán cho VOAI — VOAI Lab/],
+  ["huong-dan", /Hướng dẫn sử dụng — VOAI Lab/],
 ];
 const expectedPrerenderRoutes = [
   "/",
   "/404",
   "/assessments",
+  "/huong-dan",
   "/labs",
   "/lessons",
   "/math",

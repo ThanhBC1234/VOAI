@@ -11,9 +11,15 @@ VOAI/IOAI.
 IOAI**. Quy chế và đề cương chính thức luôn có quyền ưu tiên; xem các nguồn đang
 được tuyển chọn tại `/resources`.
 
-> **Bắt đầu ở đây:** làm theo [Hướng dẫn đăng GitHub và sử dụng VOAI Lab](docs/BAT_DAU_SU_DUNG.md).
-> Tài liệu đi từ lúc tạo repository đến buổi học đầu tiên trên Pages, Codespaces
-> và Colab.
+> **Người học bắt đầu ở đây:** mở mục **Hướng dẫn** trên website, hoặc đọc bản
+> gộp [Hướng dẫn sử dụng VOAI Lab](docs/HUONG_DAN_SU_DUNG.md) (có kèm bản Word
+> `docs/HUONG_DAN_SU_DUNG.docx`). Một tệp duy nhất, đủ mọi thứ cần dùng hằng ngày.
+>
+> **Người triển khai** (đưa lên GitHub, chạy trên máy) đọc
+> [Hướng dẫn triển khai](docs/HUONG_DAN_TRIEN_KHAI_GITHUB.md). Các tệp
+> [BAT_DAU_SU_DUNG](docs/BAT_DAU_SU_DUNG.md),
+> [HUONG_DAN_NGUOI_HOC](docs/HUONG_DAN_NGUOI_HOC.md) và
+> [GITHUB_ONLINE](docs/GITHUB_ONLINE.md) vẫn giữ làm bản tham chiếu chi tiết.
 
 ## Trong kho mã có gì?
 

@@ -11,6 +11,7 @@ export function SiteHeader() {
         </span>
       </InternalLink>
       <nav aria-label="Điều hướng chính">
+        <InternalLink href="/huong-dan">Hướng dẫn</InternalLink>
         <InternalLink href="/roadmap">Lộ trình</InternalLink>
         <InternalLink href="/lessons">Bài giảng</InternalLink>
         <InternalLink href="/math">Toán</InternalLink>

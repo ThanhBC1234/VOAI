@@ -25,8 +25,10 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "docs" / "HUONG_DAN_TRIEN_KHAI_GITHUB.md"
-OUTPUT = ROOT / "docs" / "HUONG_DAN_TRIEN_KHAI_GITHUB.docx"
+# Cho phép dùng lại bộ dựng này cho nhiều tài liệu: truyền tên tệp qua argv.
+_name = sys.argv[1] if len(sys.argv) > 1 else "HUONG_DAN_TRIEN_KHAI_GITHUB"
+SOURCE = ROOT / "docs" / f"{_name}.md"
+OUTPUT = ROOT / "docs" / f"{_name}.docx"
 
 FONT_BODY = "Calibri"
 FONT_CODE = "Consolas"

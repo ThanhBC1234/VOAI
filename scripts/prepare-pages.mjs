@@ -5,6 +5,7 @@ import { BASE_PATH, REPOSITORY_NAME } from "../site.config.mjs";
 const outputDirectory = path.resolve("dist", "client");
 const routeNames = [
   "assessments",
+  "huong-dan",
   "labs",
   "lessons",
   "math",
