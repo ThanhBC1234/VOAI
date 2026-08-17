@@ -1,12 +1,22 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { emitAssessmentChunks } from "./emit-assessment-chunks.mjs";
 
 const requestedMode = process.argv[2];
 if (!new Set(["dev", "build", "start", "pages"]).has(requestedMode)) {
   throw new Error(`Unsupported vinext mode: ${requestedMode ?? "missing"}`);
 }
 const mode = requestedMode === "pages" ? "build" : requestedMode;
+
+// PERF-P3-01: chunk chi tiết assessment là tài sản sinh ra, không commit. Sinh
+// ở đây (chứ không phải ở một script `prebuild` riêng) để **mọi** chế độ —
+// dev, build, start, pages — đều có chunk, không có đường nào chạy trang mà
+// thiếu dữ liệu.
+const chunkResult = await emitAssessmentChunks();
+console.log(
+  `[voai] ${chunkResult.chunks} chunk assessment · ${(chunkResult.bytes / 1024).toFixed(1)} KB raw`,
+);
 
 const executable = process.execPath;
 const cli = path.join("node_modules", "vinext", "dist", "cli.js");

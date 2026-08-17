@@ -615,19 +615,19 @@ export const sectionB1Questions: readonly TheoryQuestion[] = [
     stem: "Vì sao dùng MLP trên ảnh 224×224×3 bằng cách trải phẳng thành vector là lựa chọn kém?",
     choices: [
       "Vì MLP không xử lý được đầu vào số thực.",
-      "Vì mất hoàn toàn cấu trúc không gian lân cận và số tham số của lớp đầu bùng nổ (hơn 150.000 đầu vào cho mỗi nơ-ron), lại không có tính bất biến tịnh tiến.",
+      "Vì mất hoàn toàn cấu trúc không gian lân cận và số tham số của lớp đầu bùng nổ (hơn 150.000 đầu vào cho mỗi nơ-ron), lại không có tính tương đương tịnh tiến.",
       "Vì MLP chỉ nhận đầu vào tối đa 1.000 chiều.",
       "Vì ảnh màu cần ba mạng riêng biệt.",
     ],
     answerIndex: 1,
     choiceNotes: [
       "Sai: MLP nhận số thực bình thường.",
-      "Đúng: ba vấn đề cùng lúc — cấu trúc, số tham số và tính bất biến.",
+      "Đúng: ba vấn đề cùng lúc — cấu trúc, số tham số và tính tương đương tịnh tiến.",
       "Sai: không có giới hạn cứng như vậy.",
       "Sai: ba kênh được xử lý trong cùng một mạng.",
     ],
     explanation:
-      "Convolution giải quyết cả ba: dùng chung trọng số theo vị trí, kết nối cục bộ và bất biến tịnh tiến. Đây chính là lý do CNN ra đời.",
+      "Convolution giải quyết cả ba: dùng chung trọng số theo vị trí, kết nối cục bộ và **tương đương tịnh tiến** (translation-equivariant) — dịch ảnh đi thì feature map dịch theo đúng chừng ấy. Nói chính xác thì bản thân convolution *không* bất biến tịnh tiến; tính bất biến gần đúng chỉ xuất hiện sau pooling hoặc global average pooling. Đây chính là lý do CNN ra đời.",
   },
   {
     id: "mlp-05",
@@ -829,12 +829,12 @@ export const sectionB1Questions: readonly TheoryQuestion[] = [
     answerIndex: 1,
     choiceNotes: [
       "Sai: gradient ban đầu vẫn là ước lượng hợp lệ.",
-      "Đúng: với β₁ = 0.9, sau bước đầu tiên moment chỉ bằng 10% giá trị đáng có nếu không hiệu chỉnh.",
+      "Đúng: với β₁ = 0.9, sau bước đầu tiên m₁ chỉ bằng 10% và v₁ chỉ bằng 0.1% giá trị đáng có nếu không hiệu chỉnh.",
       "Sai: đây là vấn đề riêng của thống kê moment.",
       "Sai: trọng số đã được khởi tạo trước khi huấn luyện.",
     ],
     explanation:
-      "Không có hiệu chỉnh, các bước đầu sẽ quá nhỏ một cách giả tạo. Sau vài chục bước, hệ số hiệu chỉnh tiến về 1 và không còn tác dụng.",
+      "Chú ý hai moment lệch **không** cùng mức nên tác động không triệt tiêu nhau. Với β₁ = 0.9, β₂ = 0.999, bước đầu chưa hiệu chỉnh có tỷ lệ m₁/√v₁ bị nhân thêm hệ số (1 − β₁)/√(1 − β₂) ≈ 3.16, tức bước cập nhật thường **lớn hơn** mức đáng có chứ không nhỏ đi. Sau vài trăm bước, hai hệ số hiệu chỉnh cùng tiến về 1 và ảnh hưởng biến mất.",
   },
   {
     id: "adam-04",

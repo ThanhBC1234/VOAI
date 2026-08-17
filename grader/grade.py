@@ -1,4 +1,15 @@
-"""CLI chấm bài SOLO-90 bằng public/private cases định nghĩa trong JSON."""
+"""CLI chấm bài SOLO-90 bằng public/private cases định nghĩa trong JSON.
+
+Ranh giới tin cậy (GRADER-P1-01..03):
+
+- Kết quả của worker đi qua **tệp envelope riêng**, không qua stdout. Bài nộp in
+  gì ra màn hình cũng không đổi được điểm.
+- Envelope phân biệt `returned` / `raised` / `harness_error`. Chỉ `raised` mới
+  được đối chiếu với `raises` của spec.
+- `raises` được so theo **MRO đầy đủ**, nên subclass hợp lệ của `ValueError` được
+  chấp nhận, còn một class trùng tên ở module khác thì không.
+- Timeout hạ cả cây tiến trình (xem `grader/proc.py`).
+"""
 
 from __future__ import annotations
 
@@ -6,13 +17,26 @@ import argparse
 import copy
 import json
 import math
-import subprocess
 import sys
+import tempfile
+import uuid
 from pathlib import Path
+
+try:
+    from grader.proc import CLEANUP_GRACE_SECONDS, run_guarded
+except ModuleNotFoundError:  # chạy trực tiếp: `python grader/grade.py ...`
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from grader.proc import CLEANUP_GRACE_SECONDS, run_guarded
 
 ROOT = Path(__file__).resolve().parent
 WORKER = ROOT / "worker.py"
 SPECS = ROOT / "specs.json"
+
+#: Các category dùng để giải thích cho người học vì sao một case không đạt.
+CATEGORY_TIMEOUT = "timeout"
+CATEGORY_RUNTIME = "runtime"
+CATEGORY_EXCEPTION = "exception"
+CATEGORY_WRONG_ANSWER = "wrong-answer"
 
 
 def equivalent(actual, expected, tolerance: float = 1e-8) -> bool:
@@ -25,36 +49,78 @@ def equivalent(actual, expected, tolerance: float = 1e-8) -> bool:
     return actual == expected
 
 
+def exception_matches(envelope: dict, expected: str) -> bool:
+    """Khớp `raises` theo MRO đầy đủ thay vì so tên chuỗi tuyệt đối.
+
+    - `"ValueError"` (không có dấu chấm) khớp với `builtins.ValueError` ở bất kỳ
+      vị trí nào trong MRO, nên subclass do người học định nghĩa vẫn được nhận.
+    - Tên có dấu chấm được so nguyên dạng với MRO đã định danh đầy đủ, dùng khi
+      contract cần chỉ đúng một class cụ thể.
+    """
+    mro = envelope.get("mro") or []
+    if not isinstance(mro, list):
+        return False
+    if "." in expected:
+        return expected in mro
+    return f"builtins.{expected}" in mro
+
+
 def run_case(submission: Path, function: str, case: dict, timeout: float) -> tuple[bool, str]:
-    payload = {
-        "submission": str(submission),
-        "function": function,
-        "args": copy.deepcopy(case.get("args", [])),
-        "kwargs": copy.deepcopy(case.get("kwargs", {})),
-    }
-    try:
-        process = subprocess.run(
+    """Chạy một case và trả về (đạt hay không, category giải thích)."""
+    with tempfile.TemporaryDirectory(prefix="voai-grader-") as workspace:
+        result_path = Path(workspace) / f"result-{uuid.uuid4().hex}.json"
+        nonce = uuid.uuid4().hex
+        payload = {
+            "submission": str(submission),
+            "function": function,
+            "args": copy.deepcopy(case.get("args", [])),
+            "kwargs": copy.deepcopy(case.get("kwargs", {})),
+            "resultPath": str(result_path),
+            "nonce": nonce,
+        }
+
+        outcome = run_guarded(
             [sys.executable, "-I", str(WORKER)],
-            input=json.dumps(payload, ensure_ascii=False),
-            text=True,
-            capture_output=True,
+            json.dumps(payload, ensure_ascii=False),
             timeout=timeout,
-            check=False,
         )
-    except subprocess.TimeoutExpired:
-        return False, "timeout"
-    try:
-        response = json.loads(process.stdout.strip().splitlines()[-1])
-    except (json.JSONDecodeError, IndexError):
-        return False, "runtime"
-    if "workerError" in response:
-        return False, "runtime"
-    expected_error = case.get("raises")
-    if expected_error:
-        return (not response.get("ok") and response.get("errorType") == expected_error), "exception"
-    if not response.get("ok"):
-        return False, "runtime"
-    return equivalent(response.get("result"), case.get("expected"), case.get("tolerance", 1e-8)), "wrong-answer"
+        if outcome.status == "timeout":
+            return False, CATEGORY_TIMEOUT
+
+        # Thiếu envelope hoặc envelope hỏng đều là lỗi runtime, không phải lỗi của bài.
+        try:
+            envelope = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False, CATEGORY_RUNTIME
+        if not isinstance(envelope, dict) or envelope.get("nonce") != nonce:
+            return False, CATEGORY_RUNTIME
+
+        result_outcome = envelope.get("outcome")
+        expected_error = case.get("raises")
+
+        if result_outcome == "harness_error":
+            return False, CATEGORY_RUNTIME
+
+        if result_outcome == "raised":
+            if not expected_error:
+                return False, CATEGORY_RUNTIME
+            return exception_matches(envelope, expected_error), CATEGORY_EXCEPTION
+
+        if result_outcome != "returned":
+            return False, CATEGORY_RUNTIME
+
+        # Worker thoát bất thường dù đã ghi envelope: coi là lỗi runtime.
+        if outcome.returncode not in (0, None):
+            return False, CATEGORY_RUNTIME
+
+        if expected_error:
+            # Spec đòi ném exception nhưng hàm lại trả về giá trị.
+            return False, CATEGORY_EXCEPTION
+
+        return (
+            equivalent(envelope.get("value"), case.get("expected"), case.get("tolerance", 1e-8)),
+            CATEGORY_WRONG_ANSWER,
+        )
 
 
 def grade(task_id: str, submission: Path, public_only: bool = False, timeout: float = 5.0) -> dict:
@@ -89,7 +155,12 @@ def main() -> int:
     parser.add_argument("task_id")
     parser.add_argument("submission", type=Path)
     parser.add_argument("--public", action="store_true", help="Chỉ chạy test công khai")
-    parser.add_argument("--timeout", type=float, default=5.0)
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=5.0,
+        help=f"Giới hạn mỗi case, tính bằng giây (cộng thêm tối đa {CLEANUP_GRACE_SECONDS}s dọn dẹp)",
+    )
     args = parser.parse_args()
     submission = args.submission.resolve()
     if not submission.is_file():

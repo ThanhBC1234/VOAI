@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { InternalLink } from "./InternalLink";
 import { sitePath } from "../lib/site-path";
+import { readJson, writeJson } from "../lib/local-storage";
 
 type TestCase = { name: string; code: string };
 type Exercise = {
@@ -27,7 +28,7 @@ const exercises: Exercise[] = [
     signature:"linear_predict(X, weights, bias)",starter:"def linear_predict(X, weights, bias):\n    # Trả về list dự đoán, mỗi hàng một giá trị\n    pass\n",
     constraints:["Không NumPy", "Không sửa dữ liệu đầu vào", "Kiểm tra mọi hàng", "O(n·d)"],examples:["linear_predict([[1,2]], [3,4], 1) → [12]"],
     visible:[{name:"Một hàng",code:"assert linear_predict([[1,2]], [3,4], 1) == [12]"},{name:"Hai hàng",code:"assert linear_predict([[0,0],[2,-1]], [2,3], .5) == [.5, 1.5]"}],
-    blind:[{name:"Không sửa đầu vào",code:"X=[[1,2]]; w=[3,4]; linear_predict(X,w,0); assert X==[[1,2]] and w==[3,4]"},{name:"Sai số chiều",code:"\ntry:\n linear_predict([[1]], [1,2], 0)\n assert False\nexcept ValueError: pass"}],
+    blind:[{name:"Không sửa đầu vào",code:"X=[[1,2]]; w=[3,4]; linear_predict(X,w,0); assert X==[[1,2]] and w==[3,4]"},{name:"Sai số chiều",code:"\ntry:\n linear_predict([[1]], [1,2], 0)\n assert False\nexcept ValueError: pass"},{name:"X rỗng",code:"assert linear_predict([], [1,2], 0) == []"}],
   },
   {
     id:"knn-vote",domain:"Machine Learning",title:"k-NN — bỏ phiếu có quy tắc",level:"Cơ bản",
@@ -35,7 +36,7 @@ const exercises: Exercise[] = [
     signature:"knn_vote(neighbors, k)",starter:"def knn_vote(neighbors, k):\n    # neighbors: list[tuple[float, str]]\n    pass\n",
     constraints:["1 ≤ k ≤ len(neighbors)", "Không giả định đầu vào đã sắp", "Giải quyết hòa xác định"],examples:["knn_vote([(0.4,'A'),(0.1,'B'),(0.2,'B')], 3) → 'B'"],
     visible:[{name:"Đa số B",code:"assert knn_vote([(0.4,'A'),(0.1,'B'),(0.2,'B')],3)=='B'"},{name:"Chỉ lấy k gần nhất",code:"assert knn_vote([(9,'B'),(.2,'A'),(.1,'A')],2)=='A'"}],
-    blind:[{name:"Hòa theo khoảng cách",code:"assert knn_vote([(.1,'Z'),(.9,'A')],2)=='Z'"},{name:"k không hợp lệ",code:"\ntry:\n knn_vote([],1)\n assert False\nexcept ValueError: pass"}],
+    blind:[{name:"Hòa theo khoảng cách",code:"assert knn_vote([(.1,'Z'),(.9,'A')],2)=='Z'"},{name:"k không hợp lệ",code:"\ntry:\n knn_vote([],1)\n assert False\nexcept ValueError: pass"},{name:"Hòa theo thứ tự từ điển",code:"assert knn_vote([(.5,'B'),(.5,'A')],2)=='A'"}],
   },
   {
     id:"binary-metrics",domain:"Đánh giá mô hình",title:"Precision, Recall và F1",level:"Cơ bản",
@@ -43,7 +44,7 @@ const exercises: Exercise[] = [
     signature:"binary_metrics(y_true, y_pred)",starter:"def binary_metrics(y_true, y_pred):\n    # Trả dict có 4 khóa: accuracy, precision, recall, f1\n    pass\n",
     constraints:["Không sklearn", "Không chia cho 0", "Hai list phải cùng độ dài và không rỗng"],examples:["binary_metrics([1,1,0],[1,0,0])['recall'] → 0.5"],
     visible:[{name:"Ví dụ cân bằng",code:"m=binary_metrics([1,1,0,0],[1,0,1,0]); assert m=={'accuracy':.5,'precision':.5,'recall':.5,'f1':.5}"}],
-    blind:[{name:"Không dự đoán dương",code:"m=binary_metrics([1,0],[0,0]); assert m['precision']==0 and m['f1']==0"},{name:"Input rỗng",code:"\ntry:\n binary_metrics([],[])\n assert False\nexcept ValueError: pass"}],
+    blind:[{name:"Không dự đoán dương",code:"m=binary_metrics([1,0],[0,0]); assert m['precision']==0 and m['f1']==0"},{name:"Input rỗng",code:"\ntry:\n binary_metrics([],[])\n assert False\nexcept ValueError: pass"},{name:"Dự đoán hoàn hảo",code:"m=binary_metrics([1,0,1],[1,0,1]); assert m['f1']==1.0"}],
   },
   {
     id:"conv-valid",domain:"Computer Vision",title:"Convolution 2D valid",level:"Trung bình",
@@ -51,11 +52,19 @@ const exercises: Exercise[] = [
     signature:"conv2d_valid(image, kernel)",starter:"def conv2d_valid(image, kernel):\n    # Không dùng scipy, numpy hoặc thư viện xử lý ảnh\n    pass\n",
     constraints:["Kernel không lớn hơn ảnh", "Hàng phải cùng độ dài", "Không lật kernel", "O(H·W·Kh·Kw)"],examples:["conv2d_valid([[1,2],[3,4]], [[1]]) → [[1,2],[3,4]]"],
     visible:[{name:"Kernel 1×1",code:"assert conv2d_valid([[1,2],[3,4]],[[2]])==[[2,4],[6,8]]"},{name:"Tổng vùng",code:"assert conv2d_valid([[1,2,3],[4,5,6],[7,8,9]],[[1,1],[1,1]])==[[12,16],[24,28]]"}],
-    blind:[{name:"Kernel chữ nhật",code:"assert conv2d_valid([[1,2,3],[4,5,6]],[[1,0]])==[[1,2],[4,5]]"},{name:"Kernel quá lớn",code:"\ntry:\n conv2d_valid([[1]],[[1,2]])\n assert False\nexcept ValueError: pass"}],
+    blind:[{name:"Kernel chữ nhật",code:"assert conv2d_valid([[1,2,3],[4,5,6]],[[1,0]])==[[1,2],[4,5]]"},{name:"Kernel quá lớn",code:"\ntry:\n conv2d_valid([[1]],[[1,2]])\n assert False\nexcept ValueError: pass"},{name:"Kernel bằng đúng ảnh",code:"assert conv2d_valid([[1,2],[3,4]],[[1,1],[1,1]])==[[10]]"}],
   },
 ];
 
 type RunResult = { ok: boolean; output: string[]; details?: {name:string;passed:boolean;blind?:boolean;category?:string}[]; error?: string };
+
+/**
+ * Hạn thời gian **khởi động** Pyodide, tách hẳn khỏi hạn 8 giây thực thi. Lần
+ * tải đầu phải kéo runtime từ CDN nên cần rộng rãi, nhưng không được vô hạn:
+ * nếu `importScripts`/`loadPyodide` treo thì trước đây UI kẹt mãi ở trạng thái
+ * tải và nút bị khoá (ARENA-P2-01).
+ */
+const BOOT_TIMEOUT_MS = 60_000;
 
 export function CodePractice() {
   const [exerciseId,setExerciseId]=useState(exercises[0].id);
@@ -66,8 +75,9 @@ export function CodePractice() {
   const [result,setResult]=useState<RunResult|null>(null);
   const workerRef=useRef<Worker|null>(null);
   const timeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
+  const bootTimeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
 
-  useEffect(()=>()=>{ workerRef.current?.terminate(); if(timeoutRef.current) clearTimeout(timeoutRef.current); },[]);
+  useEffect(()=>()=>{ workerRef.current?.terminate(); if(timeoutRef.current) clearTimeout(timeoutRef.current); if(bootTimeoutRef.current) clearTimeout(bootTimeoutRef.current); },[]);
 
   const selectExercise=(id:string)=>{
     const next=exercises.find(item=>item.id===id)!;
@@ -81,14 +91,30 @@ export function CodePractice() {
     setResult(null);
     if(timeoutRef.current)clearTimeout(timeoutRef.current);
     workerRef.current?.terminate();
+    if(bootTimeoutRef.current)clearTimeout(bootTimeoutRef.current);
     const worker=new Worker(sitePath("/pyodide-worker.js"));workerRef.current=worker;
     const requestId=crypto.randomUUID();
     const runExerciseId=exercise.id; const runMode=mode;
-    const disposeWorker=()=>{worker.terminate();if(workerRef.current===worker)workerRef.current=null;};
+    const disposeWorker=()=>{
+      worker.onmessage=null;worker.onerror=null;   // response của worker cũ không được cập nhật lần chạy mới
+      worker.terminate();
+      if(workerRef.current===worker)workerRef.current=null;
+      if(bootTimeoutRef.current){clearTimeout(bootTimeoutRef.current);bootTimeoutRef.current=null;}
+      if(timeoutRef.current){clearTimeout(timeoutRef.current);timeoutRef.current=null;}
+    };
     let executionStarted=false;
+    // ARENA-P2-01: boot timeout riêng, bắt đầu ngay khi tạo worker. Nếu
+    // importScripts/loadPyodide treo thì UI không kẹt ở trạng thái tải vĩnh viễn.
+    bootTimeoutRef.current=setTimeout(()=>{
+      if(executionStarted)return;
+      disposeWorker();setStatus("idle");
+      setResult({ok:false,output:[],error:`Không tải được Python trong ${BOOT_TIMEOUT_MS/1000} giây. Kiểm tra kết nối mạng hoặc trình chặn quảng cáo, rồi bấm chạy lại.`});
+    },BOOT_TIMEOUT_MS);
     const startExecution=()=>{
       if(executionStarted)return;
-      executionStarted=true;setStatus("running");
+      executionStarted=true;
+      if(bootTimeoutRef.current){clearTimeout(bootTimeoutRef.current);bootTimeoutRef.current=null;}
+      setStatus("running");
       worker.postMessage({type:"run",requestId,code,tests});
       timeoutRef.current=setTimeout(()=>{
         disposeWorker();setStatus("idle");
@@ -107,9 +133,9 @@ export function CodePractice() {
       if(timeoutRef.current) clearTimeout(timeoutRef.current);
       disposeWorker();setStatus("idle");setResult(event.data);
       if(runMode==="blind"&&event.data.details?.every((item:{passed:boolean})=>item.passed)){
-        const current=JSON.parse(localStorage.getItem("voai-progress")||"{}");
+        const current=readJson<Record<string,unknown>>("voai-progress",value=>(typeof value==="object"&&value!==null&&!Array.isArray(value)?value as Record<string,unknown>:null),{});
         current[runExerciseId]={passedAt:new Date().toISOString(),solo:true};
-        localStorage.setItem("voai-progress",JSON.stringify(current));
+        writeJson("voai-progress",current);
       }
     };
     worker.onerror=()=>{

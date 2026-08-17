@@ -357,7 +357,7 @@ export const sectionB2Questions: readonly TheoryQuestion[] = [
     stem: "Vì sao transformer cần positional encoding?",
     choices: [
       "Để giảm số tham số.",
-      "Vì self-attention có tính hoán vị bất biến: nếu không thêm thông tin vị trí, mô hình sẽ coi câu đảo trật tự từ là như nhau.",
+      "Vì self-attention tương đương với hoán vị (permutation-equivariant): nếu không thêm thông tin vị trí, đảo trật tự từ chỉ làm output đảo theo, nên mô hình không phân biệt được trật tự.",
       "Để chuẩn hoá độ dài chuỗi về cùng một giá trị.",
       "Để mã hoá nhãn của bài toán phân loại.",
     ],
@@ -369,7 +369,7 @@ export const sectionB2Questions: readonly TheoryQuestion[] = [
       "Sai: nhãn không liên quan tới positional encoding.",
     ],
     explanation:
-      "Không có tín hiệu vị trí, “mèo đuổi chuột” và “chuột đuổi mèo” cho cùng một tập biểu diễn — mô hình mất hoàn toàn thông tin cú pháp.",
+      "Nói cho chính xác, self-attention thuần là **permutation-equivariant** chứ không phải permutation-invariant: hoán vị token đầu vào thì vector đầu ra của từng token hoán vị y hệt theo. Hệ quả là “mèo đuổi chuột” và “chuột đuổi mèo” cho cùng một *tập* biểu diễn, chỉ khác thứ tự — nên mô hình mất hoàn toàn thông tin cú pháp. (Tính invariant thật sự chỉ xuất hiện sau một phép gộp không phụ thuộc thứ tự như mean-pooling.)",
   },
   {
     id: "transformers-03",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { InternalLink } from "./InternalLink";
 
 type LabId = "gradient" | "knn" | "convolution" | "attention" | "audio" | "metrics";
@@ -17,12 +17,16 @@ const labs: { id: LabId; label: string; code: string }[] = [
 function PredictionBox({ prompt }: { prompt: string }) {
   const [value, setValue] = useState("");
   const [locked, setLocked] = useState(false);
+  // A11Y: placeholder **không** phải nhãn — nó biến mất ngay khi gõ và nhiều
+  // trình đọc màn hình bỏ qua. Nội dung câu hỏi mới là nhãn đúng, nên ô nhập
+  // trỏ tới đoạn `prompt` bằng `aria-labelledby`.
+  const promptId = useId();
   return (
     <div className="prediction-box">
       <span>DỰ ĐOÁN TRƯỚC KHI CHẠY</span>
-      <p>{prompt}</p>
+      <p id={promptId}>{prompt}</p>
       <div>
-        <input value={value} onChange={(event) => { setValue(event.target.value); setLocked(false); }} placeholder="Viết dự đoán ngắn của bạn…" disabled={locked} />
+        <input aria-labelledby={promptId} value={value} onChange={(event) => { setValue(event.target.value); setLocked(false); }} placeholder="Viết dự đoán ngắn của bạn…" disabled={locked} />
         <button onClick={() => setLocked(Boolean(value.trim()))}>{locked ? "Đã khóa" : "Khóa dự đoán"}</button>
       </div>
     </div>
@@ -109,7 +113,14 @@ function KnnLab() {
     const [qx,qy]=xy(query.x,query.y);context.strokeStyle="#102a26";context.lineWidth=3;context.beginPath();context.arc(qx,qy,13,0,Math.PI*2);context.stroke();context.fillStyle="#102a26";context.fillText("?",qx,qy+4);
   },[query,nearest]);
   const moveQuery = (event: React.PointerEvent<HTMLCanvasElement>) => { const rect=event.currentTarget.getBoundingClientRect();setQuery({x:Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),y:Math.max(0,Math.min(1,1-(event.clientY-rect.top)/rect.height))}); };
-  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·KNN</p><h2>Hàng xóm bỏ phiếu</h2><p>k-NN không “học” tham số. Nó lưu dữ liệu và phân loại điểm mới theo nhãn chiếm đa số trong <em>k</em> điểm gần nhất.</p><label>Số hàng xóm k <strong>{k}</strong><input type="range" min="1" max="9" step="2" value={k} onChange={(e)=>setK(Number(e.target.value))}/></label><div className="lab-stats"><div><span>Phiếu A</span><strong>{votesA}</strong></div><div><span>Phiếu B</span><strong>{k-votesA}</strong></div><div><span>Dự đoán</span><strong className={result==="A"?"blue":"coral"}>{result}</strong></div></div><p className="lab-note">Thử đặt điểm hỏi gần biên và tăng k. Khi nào lớp dự đoán đổi?</p></div><div className="lab-stage"><PredictionBox prompt="Nếu tăng k, quyết định ở biên sẽ ổn định hơn hay nhạy hơn với nhiễu cục bộ?"/><canvas ref={canvas} width="660" height="310" onPointerDown={moveQuery} aria-label="Mặt phẳng dữ liệu k-NN; nhấn để di chuyển điểm cần phân loại"/><small>Nhấn vào biểu đồ để di chuyển điểm “?”.</small></div></section>;
+  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·KNN</p><h2>Hàng xóm bỏ phiếu</h2><p>k-NN không “học” tham số. Nó lưu dữ liệu và phân loại điểm mới theo nhãn chiếm đa số trong <em>k</em> điểm gần nhất.</p><label>Số hàng xóm k <strong>{k}</strong><input type="range" min="1" max="9" step="2" value={k} onChange={(e)=>setK(Number(e.target.value))}/></label><div className="lab-stats"><div><span>Phiếu A</span><strong>{votesA}</strong></div><div><span>Phiếu B</span><strong>{k-votesA}</strong></div><div><span>Dự đoán</span><strong className={result==="A"?"blue":"coral"}>{result}</strong></div></div><p className="lab-note">Thử đặt điểm hỏi gần biên và tăng k. Khi nào lớp dự đoán đổi?</p></div><div className="lab-stage"><PredictionBox prompt="Nếu tăng k, quyết định ở biên sẽ ổn định hơn hay nhạy hơn với nhiễu cục bộ?"/><canvas ref={canvas} width="660" height="310" onPointerDown={moveQuery} aria-label={`Mặt phẳng dữ liệu k-NN. Điểm cần phân loại đang ở x ${query.x.toFixed(2)}, y ${query.y.toFixed(2)}; dự đoán hiện tại là lớp ${result}. Nhấn để di chuyển, hoặc dùng ô nhập toạ độ bên dưới.`}/><small>Nhấn vào biểu đồ để di chuyển điểm “?”.</small>
+    {/* A11Y-P2-01: canvas không nhập được bằng bàn phím, nên có form toạ độ tương đương. */}
+    <form className="knn-keyboard-form" onSubmit={(event)=>{event.preventDefault();const data=new FormData(event.currentTarget);const nx=Number(data.get("x"));const ny=Number(data.get("y"));if(Number.isFinite(nx)&&Number.isFinite(ny))setQuery({x:Math.max(0,Math.min(1,nx)),y:Math.max(0,Math.min(1,ny))});}}>
+      <label htmlFor="knn-x">Toạ độ X (0–1)<input id="knn-x" name="x" type="number" min="0" max="1" step="0.05" defaultValue={query.x.toFixed(2)}/></label>
+      <label htmlFor="knn-y">Toạ độ Y (0–1)<input id="knn-y" name="y" type="number" min="0" max="1" step="0.05" defaultValue={query.y.toFixed(2)}/></label>
+      <button type="submit">Đặt điểm hỏi</button>
+      <p role="status" className="lab-note">Điểm hỏi tại ({query.x.toFixed(2)}; {query.y.toFixed(2)}) — dự đoán lớp {result}, phiếu A {votesA}/{k}.</p>
+    </form></div></section>;
 }
 
 const kernels = {
@@ -123,7 +134,7 @@ function ConvolutionLab() {
   const [kernelName,setKernelName]=useState<keyof typeof kernels>("Dò cạnh"); const kernel=kernels[kernelName];
   const output=useMemo(()=>Array.from({length:3},(_,row)=>Array.from({length:3},(_,col)=>kernel.reduce((sum,line,kr)=>sum+line.reduce((inside,value,kc)=>inside+value*image[row+kr][col+kc],0),0))),[image,kernel]);
   const toggle=(row:number,col:number)=>setImage(current=>current.map((line,r)=>line.map((value,c)=>r===row&&c===col?(value?0:1):value)));
-  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·CNN</p><h2>Một kernel, nhiều đặc trưng</h2><p>Convolution trượt một ma trận nhỏ trên ảnh. Mỗi ô đầu ra là tổng tích từng phần tử giữa vùng ảnh và kernel.</p><select value={kernelName} onChange={(e)=>setKernelName(e.target.value as keyof typeof kernels)}>{Object.keys(kernels).map(name=><option key={name}>{name}</option>)}</select><div className="kernel-grid">{kernel.flat().map((v,i)=><span key={i}>{Number.isInteger(v)?v:v.toFixed(2)}</span>)}</div><div className="formula">Y[i,j] = Σₘ Σₙ X[i+m,j+n]K[m,n]</div></div><div className="lab-stage"><PredictionBox prompt="Với kernel hiện tại, vùng phẳng hay vùng thay đổi sáng–tối sẽ cho trị tuyệt đối lớn hơn?"/><div className="matrix-pair"><div><strong>Ảnh 5×5 — nhấn để đổi pixel</strong><div className="pixel-grid">{image.flatMap((line,row)=>line.map((v,col)=><button key={`${row}-${col}`} className={v?"on":""} onClick={()=>toggle(row,col)} aria-label={`Pixel hàng ${row+1} cột ${col+1}: ${v}`}>{v}</button>))}</div></div><span className="matrix-arrow">∗ →</span><div><strong>Feature map 3×3</strong><div className="output-grid">{output.flat().map((v,i)=><span key={i} style={{background:`rgba(183,243,107,${Math.min(1,Math.abs(v)/4+.08)})`}}>{v.toFixed(1)}</span>)}</div></div></div></div></section>;
+  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·CNN</p><h2>Một kernel, nhiều đặc trưng</h2><p>Convolution trượt một ma trận nhỏ trên ảnh. Mỗi ô đầu ra là tổng tích từng phần tử giữa vùng ảnh và kernel.</p><select aria-label="Chọn kernel convolution" value={kernelName} onChange={(e)=>setKernelName(e.target.value as keyof typeof kernels)}>{Object.keys(kernels).map(name=><option key={name}>{name}</option>)}</select><div className="kernel-grid">{kernel.flat().map((v,i)=><span key={i}>{Number.isInteger(v)?v:v.toFixed(2)}</span>)}</div><div className="formula">Y[i,j] = Σₘ Σₙ X[i+m,j+n]K[m,n]</div></div><div className="lab-stage"><PredictionBox prompt="Với kernel hiện tại, vùng phẳng hay vùng thay đổi sáng–tối sẽ cho trị tuyệt đối lớn hơn?"/><div className="matrix-pair"><div><strong>Ảnh 5×5 — nhấn để đổi pixel</strong><div className="pixel-grid">{image.flatMap((line,row)=>line.map((v,col)=><button key={`${row}-${col}`} className={v?"on":""} onClick={()=>toggle(row,col)} aria-label={`Pixel hàng ${row+1} cột ${col+1}: ${v}`}>{v}</button>))}</div></div><span className="matrix-arrow">∗ →</span><div><strong>Feature map 3×3</strong><div className="output-grid">{output.flat().map((v,i)=><span key={i} style={{background:`rgba(183,243,107,${Math.min(1,Math.abs(v)/4+.08)})`}}>{v.toFixed(1)}</span>)}</div></div></div></div></section>;
 }
 
 const tokenNames=["AI","học","từ","dữ liệu"];

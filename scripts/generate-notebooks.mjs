@@ -1,8 +1,23 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const md = (source) => ({ cell_type: "markdown", metadata: {}, source: source.split("\n").map((line) => `${line}\n`) });
 const code = (source) => ({ cell_type: "code", execution_count: null, metadata: {}, outputs: [], source: source.split("\n").map((line) => `${line}\n`) });
+
+/**
+ * nbformat 4.5 bắt buộc mỗi cell có `id`: chuỗi 1–64 ký tự thuộc [a-zA-Z0-9-_]
+ * và duy nhất trong notebook. Trước đây generator khai `nbformat_minor: 5`
+ * nhưng không sinh id nào, nên cả 8 notebook đều sai schema (NOTEBOOK-P2-01).
+ *
+ * ID được suy ra tất định từ (tên tệp, vị trí cell) nên chạy generator hai lần
+ * không tạo diff, và không phụ thuộc nội dung nên sửa chữ trong cell không làm
+ * đổi id.
+ */
+const cellId = (file, index) =>
+  `c${String(index).padStart(2, "0")}-${createHash("sha1").update(`${file}:${index}`).digest("hex").slice(0, 10)}`;
+
+const withCellIds = (file, cells) => cells.map((cell, index) => ({ id: cellId(file, index), ...cell }));
 
 const modules = [
   {
@@ -45,8 +60,8 @@ const modules = [
     outcomes: ["Trace forward pass bằng NumPy", "Giải thích chain rule qua từng tensor", "Tự viết training loop PyTorch không helper"],
     concept: "Backprop không phải thuật toán tối ưu; nó tính gradient hiệu quả bằng chain rule. Optimizer mới dùng gradient để đổi tham số. Luôn kiểm tra shape: batch × feature.",
     setup: "import numpy as np\nnp.random.seed(42)\nX=np.array([[0.,0.],[0.,1.],[1.,0.],[1.,1.]])\ny=np.array([[0.],[1.],[1.],[0.]])\nW1=np.random.randn(2,4)*.3; b1=np.zeros((1,4)); W2=np.random.randn(4,1)*.3; b2=np.zeros((1,1))",
-    task: "def sigmoid(z):\n    # TODO: bản ổn định số học\n    pass\n\ndef forward(X,W1,b1,W2,b2):\n    # TODO: trả prediction và cache cần cho backward\n    pass\n\ndef backward(y, cache, W2):\n    # TODO: tự suy ra 4 gradient\n    pass",
-    tests: "assert np.allclose(sigmoid(np.array([0.])), .5)\npred,cache=forward(X,W1,b1,W2,b2)\nassert pred.shape==(4,1)\nassert np.all((pred>0)&(pred<1))\nprint('✓ Forward interface đạt; tiếp tục gradient-check từng tham số')",
+    task: "def sigmoid(z):\n    # TODO: ban on dinh so hoc (tranh overflow khi z rat am/rat duong)\n    pass\n\ndef forward(X, W1, b1, W2, b2):\n    \"\"\"Contract:\n      - hidden activation: sigmoid; output activation: sigmoid\n      - tra (pred, cache) voi pred.shape == (N, 1)\n      - cache phai du cho backward: dict co khoa 'X', 'Z1', 'A1', 'Z2'\n    \"\"\"\n    # TODO\n    pass\n\ndef bce_loss(y, pred, eps=1e-12):\n    \"\"\"Binary cross-entropy trung binh theo mau. Kep pred vao [eps, 1-eps].\"\"\"\n    # TODO\n    pass\n\ndef backward(y, cache, W2):\n    \"\"\"Tra (dW1, db1, dW2, db2) cua bce_loss theo tung tham so.\n\n    Shape bat buoc: dW1 (2,4), db1 (1,4), dW2 (4,1), db2 (1,1).\n    Goi y: voi sigmoid o dau ra + BCE thi dZ2 = (pred - y) / N.\n    \"\"\"\n    # TODO\n    pass",
+    tests: "assert np.allclose(sigmoid(np.array([0.])), .5)\npred, cache = forward(X, W1, b1, W2, b2)\nassert pred.shape == (4, 1) and np.all((pred > 0) & (pred < 1))\nassert {'X', 'Z1', 'A1', 'Z2'} <= set(cache), 'cache thieu khoa can cho backward'\n\n# Visible test PHAI goi backward va kiem tra shape tung gradient.\ndW1, db1, dW2, db2 = backward(y, cache, W2)\nassert dW1.shape == W1.shape and db1.shape == b1.shape\nassert dW2.shape == W2.shape and db2.shape == b2.shape\n\n# Numerical gradient check tren mot phan tu cua W2.\ndef loss_at(w2):\n    p, _ = forward(X, W1, b1, w2, b2)\n    return bce_loss(y, p)\n\neps = 1e-5\nW2p = W2.copy(); W2p[0, 0] += eps\nW2m = W2.copy(); W2m[0, 0] -= eps\nnumeric = (loss_at(W2p) - loss_at(W2m)) / (2 * eps)\nassert abs(numeric - dW2[0, 0]) < 1e-4, 'gradient giai tich khong khop gradient so'\nprint('OK Forward, backward va numerical gradient check deu dat')",
     deep: "Sau khi bản NumPy đạt gradient-check, viết lại bằng torch.nn.Module nhưng tự viết zero_grad → forward → loss → backward → step. So sánh loss curve của SGD và Adam.",
   },
   {
@@ -67,8 +82,8 @@ const modules = [
     outcomes: ["Chuẩn hóa Unicode tiếng Việt", "Cài TF-IDF nhỏ", "Tính scaled dot-product attention"],
     concept: "TF-IDF mô tả tài liệu bằng tần suất có điều chỉnh độ hiếm; embedding học tọa độ dày; attention tạo trọng số phụ thuộc ngữ cảnh giữa các token.",
     setup: "import math, re, unicodedata\nimport numpy as np\ndocs=['mô hình học từ dữ liệu','dữ liệu tốt giúp mô hình tốt','học máy cần đánh giá']\ndocs=[unicodedata.normalize('NFC',d.lower()) for d in docs]",
-    task: "def tfidf_matrix(documents):\n    # TODO: tokenize đơn giản, smooth idf=log((1+n)/(1+df))+1\n    # trả matrix và vocabulary theo thứ tự từ điển\n    pass\n\ndef scaled_dot_attention(Q,K,V):\n    # TODO: softmax ổn định theo hàng\n    pass",
-    tests: "M,vocab=tfidf_matrix(docs)\nassert M.shape==(3,len(vocab)) and vocab==sorted(vocab)\nQ=np.eye(2); out,weights=scaled_dot_attention(Q,Q,np.array([[1.,2.],[3.,4.]]))\nassert out.shape==(2,2) and np.allclose(weights.sum(axis=1),1)\nprint('✓ Shape và chuẩn hóa attention đạt')",
+    task: "def tfidf_matrix(documents):\n    # TODO: tokenize don gian, smooth idf = log((1+n)/(1+df)) + 1\n    # tra (matrix, vocabulary) voi vocabulary theo thu tu tu dien\n    pass\n\ndef scaled_dot_attention(Q, K, V, mask=None):\n    \"\"\"Scaled dot-product attention co mask.\n\n    Contract:\n      - scores = Q @ K.T / sqrt(d_k)\n      - `mask` la mang bool broadcast duoc ve shape cua scores (n_q, n_k).\n        True = DUOC PHEP nhin, False = bi chan.\n      - Mask phai ap **truoc** softmax bang cach dat -inf cho vi tri bi chan,\n        khong duoc nhan 0 sau softmax (nhan sau lam tong trong so khac 1).\n      - softmax on dinh: tru max theo tung hang truoc khi exp.\n      - tra (output, weights); moi hang cua weights cong lai bang 1.\n    \"\"\"\n    # TODO\n    pass\n\ndef causal_mask(n):\n    \"\"\"Tra mask bool (n, n) cho mo hinh tu hoi quy: vi tri i chi nhin duoc j <= i.\"\"\"\n    # TODO\n    pass",
+    tests: "M, vocab = tfidf_matrix(docs)\nassert M.shape == (3, len(vocab)) and vocab == sorted(vocab)\n\nQ = np.eye(2)\nV = np.array([[1., 2.], [3., 4.]])\nout, weights = scaled_dot_attention(Q, Q, V)\nassert out.shape == (2, 2) and np.allclose(weights.sum(axis=1), 1)\n\n# Mask phai chan that: vi tri bi chan co trong so ~0 va hang van tong bang 1.\nm = causal_mask(2)\nassert m.shape == (2, 2) and bool(m[0, 0]) and not bool(m[0, 1])\nout_m, w_m = scaled_dot_attention(Q, Q, V, mask=m)\nassert np.allclose(w_m.sum(axis=1), 1), 'mask ap sau softmax nen tong trong so khac 1'\nassert w_m[0, 1] < 1e-9, 'token tuong lai van nhan trong so'\nassert np.allclose(out_m[0], V[0]), 'hang dau phai chi lay tu token dau tien'\nprint('OK TF-IDF, attention va masking deu dat')",
     deep: "Giải thích vì sao softmax phải trừ max trước exp. Thay temperature và đo entropy từng hàng. So sánh classifier TF-IDF + LogisticRegression với embedding trung bình.",
   },
   {
@@ -78,8 +93,8 @@ const modules = [
     outcomes: ["Liên hệ sample rate với Nyquist", "Tự chia frame và dùng window", "Đọc spectrogram theo thời gian–tần số"],
     concept: "STFT áp dụng FFT trên các cửa sổ chồng lấn: cửa sổ ngắn định vị thời gian tốt nhưng phân giải tần số kém. Mel nén trục tần số theo cảm nhận; MFCC nén log-Mel bằng DCT.",
     setup: "import numpy as np\nsr=16000; duration=.5\nt=np.arange(int(sr*duration))/sr\nwave=.8*np.sin(2*np.pi*440*t)+.25*np.sin(2*np.pi*880*t)\nprint(len(wave), 'samples')",
-    task: "def frame_signal(x, frame_length, hop_length):\n    # TODO: padding cuối bằng 0, trả shape (n_frames, frame_length)\n    pass\n\ndef stft_magnitude(x, frame_length=400, hop_length=160):\n    # TODO: Hann window + np.fft.rfft, trả magnitude\n    pass",
-    tests: "frames=frame_signal(np.arange(7),4,2)\nassert frames.shape==(3,4) and frames[-1].tolist()==[4,5,6,0]\nS=stft_magnitude(wave)\nassert S.ndim==2 and S.shape[1]==201 and np.all(S>=0)\nprint('✓ STFT shape:',S.shape)",
+    task: "def frame_signal(x, frame_length, hop_length):\n    # TODO: padding cuoi bang 0, tra shape (n_frames, frame_length)\n    pass\n\ndef stft_magnitude(x, frame_length=400, hop_length=160):\n    # TODO: Hann window + np.fft.rfft, tra magnitude (n_frames, n_fft//2+1)\n    pass\n\ndef hz_to_mel(f):\n    \"\"\"Thang Mel kieu HTK: 2595 * log10(1 + f/700).\"\"\"\n    # TODO\n    pass\n\ndef mel_to_hz(m):\n    # TODO: ham nguoc cua hz_to_mel\n    pass\n\ndef mel_filterbank(sr=16000, n_fft=400, n_mels=20, fmin=0.0, fmax=None):\n    \"\"\"Tra ma tran (n_mels, n_fft//2+1) gom cac bo loc tam giac.\n\n    Cac buoc: chia deu n_mels+2 diem tren thang Mel giua fmin va fmax, doi ve Hz,\n    quy ve chi so bin FFT, roi dung tam giac len/xuong giua ba diem lien tiep.\n    Moi he so phai khong am.\n    \"\"\"\n    # TODO\n    pass\n\ndef mfcc(log_mel, n_mfcc=13):\n    \"\"\"DCT-II truc giao theo truc Mel, tra shape (n_frames, n_mfcc).\"\"\"\n    # TODO\n    pass",
+    tests: "frames = frame_signal(np.arange(7), 4, 2)\nassert frames.shape == (3, 4) and frames[-1].tolist() == [4, 5, 6, 0]\n\nS = stft_magnitude(wave)\nassert S.ndim == 2 and S.shape[1] == 201 and np.all(S >= 0)\n\nassert abs(hz_to_mel(0.0)) < 1e-9\nassert abs(mel_to_hz(hz_to_mel(440.0)) - 440.0) < 1e-6, 'hz_to_mel va mel_to_hz khong nghich dao nhau'\n\nfb = mel_filterbank(sr=16000, n_fft=400, n_mels=20)\nassert fb.shape == (20, 201), 'filterbank sai shape'\nassert np.all(fb >= 0), 'he so filterbank phai khong am'\nassert np.all(fb.sum(axis=1) > 0), 'co bo loc rong hoan toan'\n\nmel_spec = S @ fb.T\nlog_mel = np.log(mel_spec + 1e-10)\nC = mfcc(log_mel, n_mfcc=13)\nassert C.shape == (S.shape[0], 13), 'MFCC sai shape'\n\n# DCT cua tin hieu hang: chi he so bac 0 khac 0.\nflat = np.ones((1, 20))\nc0 = mfcc(flat, n_mfcc=5)\nassert abs(c0[0, 0]) > 1e-6 and np.allclose(c0[0, 1:], 0, atol=1e-8), 'DCT chua dung'\nprint('OK Framing, STFT, Mel filterbank va MFCC deu dat', C.shape)",
     deep: "Tìm bin gần 440 Hz và 880 Hz. Thay frame_length 256/1024, giải thích đánh đổi. Nếu cài librosa, so sánh output nhưng không thay phần tự cài.",
   },
   {
@@ -89,8 +104,8 @@ const modules = [
     outcomes: ["Đọc metric và dựng baseline trong 30 phút", "Thiết kế split chống leakage", "Lưu prediction đúng format và tái lập bằng seed"],
     concept: "Trong đề thi, baseline sớm cho vòng lặp nhanh. Thứ tự an toàn: hiểu metric → kiểm tra dữ liệu → split → baseline → error analysis → một thay đổi mỗi lần → xác nhận validation → đóng gói submission.",
     setup: "import numpy as np\nfrom sklearn.datasets import make_classification\nX,y=make_classification(n_samples=900,n_features=24,n_informative=8,weights=[.72,.28],flip_y=.04,random_state=42)\nprint(X.shape, np.bincount(y))",
-    task: "# PHIÊN 1: viết data audit và chọn metric\n# PHIÊN 2: split có stratify, giữ test giả lập kín\n# PHIÊN 3: baseline đơn giản\n# PHIÊN 4: error analysis và một cải tiến\n# PHIÊN 5: ablation + kiểm tra seed\n# PHIÊN 6: xuất submission.csv và báo cáo 1 trang\nmodel = None\nvalidation_score = None",
-    tests: "assert model is not None, 'Cần một mô hình đã fit'\nassert validation_score is not None and 0 <= validation_score <= 1\n# TODO: thêm assert không trùng chỉ số giữa train/validation/mock-test\nprint('✓ Sẵn sàng chạy audit cuối')",
+    task: "# PHIEN 1: data audit (phan bo lop, gia tri thieu, trung lap) va chon metric\n# PHIEN 2: split co stratify thanh train/valid/test; KHONG duoc chong chi so\n# PHIEN 3: baseline don gian, phai vuot muc doan lop da so\n# PHIEN 4: error analysis va dung MOT cai tien\n# PHIEN 5: ablation + xac nhan tai lap bang seed\n# PHIEN 6: xuat submission.csv va bao cao 1 trang\n\nSEED = 42          # TODO: dung SEED nay o moi cho co ngau nhien\ntrain_idx = None   # TODO: mang chi so\nvalid_idx = None   # TODO: mang chi so, khong giao voi train\ntest_idx = None    # TODO: mang chi so, giu kin toi phien cuoi\nmodel = None       # TODO: mot estimator da fit, co .fit/.predict\nvalidation_score = None  # TODO: F1 tren valid_idx, tu tinh lai duoc",
+    tests: "# Audit checkpoint: mot placeholder rong (khong co fit/predict) KHONG duoc di qua.\nassert model is not None, 'Can mot mo hinh da fit'\nassert hasattr(model, 'fit') and hasattr(model, 'predict'), 'model phai co interface fit/predict'\nassert callable(model.predict), 'model.predict phai goi duoc'\n\nfor _name in ('train_idx', 'valid_idx', 'test_idx', 'SEED'):\n    assert globals().get(_name) is not None, 'thieu ' + _name\n\ntrain_idx = np.asarray(train_idx); valid_idx = np.asarray(valid_idx); test_idx = np.asarray(test_idx)\nassert len(set(train_idx) & set(valid_idx)) == 0, 'train va validation trung chi so - leakage'\nassert len(set(train_idx) & set(test_idx)) == 0, 'train va mock-test trung chi so - leakage'\nassert len(set(valid_idx) & set(test_idx)) == 0, 'validation va mock-test trung chi so - leakage'\nassert len(train_idx) + len(valid_idx) + len(test_idx) == len(y), 'split khong phu het du lieu'\n\npred_valid = np.asarray(model.predict(X[valid_idx]))\nassert pred_valid.shape[0] == len(valid_idx), 'predict tra sai so luong'\n\nfrom sklearn.metrics import f1_score\nmeasured = f1_score(y[valid_idx], pred_valid)\nassert 0 <= validation_score <= 1\nassert abs(measured - validation_score) < 1e-6, 'validation_score khong khop metric tinh lai'\n\nmajority = np.full(len(valid_idx), np.bincount(y[train_idx]).argmax())\nassert measured > f1_score(y[valid_idx], majority), 'chua vuot baseline doan lop da so'\nassert np.array_equal(pred_valid, np.asarray(model.predict(X[valid_idx]))), 'predict khong tat dinh'\n\nimport os\nassert os.path.exists('submission.csv'), 'thieu artifact submission.csv'\nprint('OK Audit dat - F1 validation', round(measured, 4), 'seed', SEED)",
     deep: "Lặp mock với ảnh, văn bản hoặc audio từ kho IOAI chính thức. Không reuse test để tuning. Nhật ký phải ghi thử nghiệm, seed, metric và quyết định giữ/bỏ.",
   },
 ];
@@ -100,7 +115,7 @@ mkdirSync(outputDir, { recursive: true });
 
 for (const moduleSpec of modules) {
   const notebook = {
-    cells: [
+    cells: withCellIds(moduleSpec.file, [
       md(`# ${moduleSpec.title}\n\n**Thời lượng:** ${moduleSpec.duration}  \n**Chế độ:** SOLO-90 — không dùng AI sinh code hoặc pseudocode.\n\nNotebook này là bài thực hành có chủ đích, không phải lời giải mẫu.`),
       md(`## Mục tiêu\n\n${moduleSpec.outcomes.map((item) => `- ${item}`).join("\n")}`),
       md(`## Trực giác cốt lõi\n\n${moduleSpec.concept}\n\nTrước khi chạy cell tiếp theo, hãy viết một dự đoán vào sổ học.`),
@@ -111,7 +126,7 @@ for (const moduleSpec of modules) {
       code(moduleSpec.tests),
       md(`## Deep 60\n\n${moduleSpec.deep}`),
       md("## Exit ticket\n\n1. Tôi có thể giải thích thuật toán mà không nhìn code không?  \n2. Edge case nào làm bản đầu tiên sai?  \n3. Độ phức tạp thời gian/bộ nhớ là gì?  \n4. Tôi sẽ ôn lại điều gì vào ngày +1, +7 và +21?"),
-    ],
+    ]),
     metadata: {
       kernelspec: { display_name: "Python 3", language: "python", name: "python3" },
       language_info: { name: "python", version: "3.11" },

@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { describeWriteStatus, readJson, writeJson } from "../lib/local-storage";
+import { loadAssessmentChunk, type AssessmentDetailMap } from "../lib/assessment-details";
 import type {
-  AssessmentScoreWeights,
-  DailyAssessment,
-} from "../content/daily-assessments";
+  AssessmentCatalogEntry,
+  AssessmentDetail,
+} from "../content/assessment-chunk-format";
+import type { AssessmentScoreWeights } from "../content/daily-assessments";
 
 type AttemptStatus = "passed" | "needs-revision" | "incomplete";
 
@@ -18,6 +21,16 @@ interface AssessmentDraft {
   noAutomaticFailConfirmed: boolean;
 }
 
+/**
+ * Rubric dùng để chấm một attempt. Với attempt mới đây là `rubricSnapshot` của
+ * chính nó; với attempt cũ (trước ASSESS-P2-02) là rubric hiện hành.
+ */
+interface AssessmentRubric {
+  weights: AssessmentScoreWeights;
+  minimumScore: number;
+  minimumSectionScores: AssessmentScoreWeights;
+}
+
 interface StoredAttempt extends AssessmentDraft {
   id: string;
   assessmentId: string;
@@ -26,15 +39,29 @@ interface StoredAttempt extends AssessmentDraft {
   score: number;
   threshold: number;
   status: AttemptStatus;
+  /**
+   * Rubric tại thời điểm nộp. Attempt cũ (trước ASSESS-P2-02) không có trường
+   * này nên nó là tuỳ chọn; chúng vẫn hiển thị được và không bị xoá.
+   */
+  rubricSnapshot?: {
+    version: number;
+    weights: AssessmentScoreWeights;
+    minimumScore: number;
+    minimumSectionScores: AssessmentScoreWeights;
+  };
 }
 
 type Props = {
-  assessments: readonly DailyAssessment[];
-  initialSessionId?: string;
+  /** Danh mục nhẹ đủ để liệt kê, lọc, dựng nháp và kiểm định lịch sử attempt. */
+  catalog: readonly AssessmentCatalogEntry[];
+  /** Chi tiết của bài được chọn khi render lần đầu; các bài khác tải theo tuần. */
+  initialDetail: AssessmentDetail;
 };
 
 const STORAGE_KEY = "voai-assessment-attempts-v1";
-const kindLabels: Record<DailyAssessment["kind"], string> = {
+/** Bản nháp đang gõ, tách khỏi lịch sử attempt và có version riêng (ASSESS-P2-01). */
+const DRAFTS_STORAGE_KEY = "voai-assessment-drafts-v1";
+const kindLabels: Record<AssessmentCatalogEntry["kind"], string> = {
   lesson: "Bài học",
   lab: "Lab",
   checkpoint: "Checkpoint",
@@ -48,9 +75,17 @@ const scoreLabels: Record<keyof AssessmentScoreWeights, string> = {
 };
 const scoreCategories = ["retrieval", "coding", "validation", "explanation"] as const;
 
-function emptyDraft(assessment: DailyAssessment): AssessmentDraft {
+function rubricOf(entry: AssessmentCatalogEntry): AssessmentRubric {
   return {
-    retrievalAnswers: assessment.retrievalQuestions.map(() => ""),
+    weights: entry.scoreWeights,
+    minimumScore: entry.minimumScore,
+    minimumSectionScores: entry.minimumSectionScores,
+  };
+}
+
+function emptyDraft(entry: AssessmentCatalogEntry): AssessmentDraft {
+  return {
+    retrievalAnswers: Array.from({ length: entry.retrievalCount }, () => ""),
     codeEvidence: "",
     evidenceLink: "",
     explanation: "",
@@ -64,15 +99,10 @@ function totalScoreFor(scores: AssessmentScoreWeights): number {
   return scoreCategories.reduce((sum, category) => sum + scores[category], 0);
 }
 
-function evidenceCompleteFor(
-  draft: AssessmentDraft,
-  assessment: DailyAssessment,
-): boolean {
+function evidenceCompleteFor(draft: AssessmentDraft, retrievalCount: number): boolean {
   return Boolean(
-    draft.retrievalAnswers.length === assessment.retrievalQuestions.length &&
-      assessment.retrievalQuestions.every(
-        (_, index) => Boolean(draft.retrievalAnswers[index]?.trim()),
-      ) &&
+    draft.retrievalAnswers.length === retrievalCount &&
+      draft.retrievalAnswers.every((answer) => Boolean(answer.trim())) &&
       draft.codeEvidence.trim() &&
       draft.explanation.trim() &&
       draft.soloConfirmed &&
@@ -82,20 +112,21 @@ function evidenceCompleteFor(
 
 function missingSectionScoreCategories(
   scores: AssessmentScoreWeights,
-  assessment: DailyAssessment,
+  rubric: AssessmentRubric,
 ): Array<keyof AssessmentScoreWeights> {
   return scoreCategories.filter(
-    (category) => scores[category] < assessment.passRule.minimumSectionScores[category],
+    (category) => scores[category] < rubric.minimumSectionScores[category],
   );
 }
 
 function computedStatusFor(
   draft: AssessmentDraft,
-  assessment: DailyAssessment,
+  rubric: AssessmentRubric,
+  retrievalCount: number,
 ): AttemptStatus {
-  if (!evidenceCompleteFor(draft, assessment)) return "incomplete";
-  const passesTotal = totalScoreFor(draft.scores) >= assessment.passRule.minimumScore;
-  const passesSections = missingSectionScoreCategories(draft.scores, assessment).length === 0;
+  if (!evidenceCompleteFor(draft, retrievalCount)) return "incomplete";
+  const passesTotal = totalScoreFor(draft.scores) >= rubric.minimumScore;
+  const passesSections = missingSectionScoreCategories(draft.scores, rubric).length === 0;
   return passesTotal && passesSections ? "passed" : "needs-revision";
 }
 
@@ -103,9 +134,46 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+function isScoreWeights(value: unknown): value is AssessmentScoreWeights {
+  if (!isRecord(value)) return false;
+  if (Object.keys(value).length !== scoreCategories.length) return false;
+  return scoreCategories.every((category) => {
+    const score = value[category];
+    return typeof score === "number" && Number.isFinite(score) && score >= 0;
+  });
+}
+
+/**
+ * ASSESS-P2-02: lịch sử **không** được diễn giải lại bằng rubric hiện tại.
+ * Attempt mang `rubricSnapshot` hợp lệ thì được chấm lại đúng bằng rubric của
+ * chính nó, nên đổi trọng số trong nội dung không làm attempt cũ đột nhiên
+ * "không đọc được" rồi biến mất khỏi màn hình.
+ */
+function rubricForAttempt(
+  value: Record<string, unknown>,
+  entry: AssessmentCatalogEntry,
+): AssessmentRubric {
+  const snapshot = value.rubricSnapshot;
+  if (
+    isRecord(snapshot) &&
+    snapshot.version === 1 &&
+    isScoreWeights(snapshot.weights) &&
+    isScoreWeights(snapshot.minimumSectionScores) &&
+    typeof snapshot.minimumScore === "number" &&
+    Number.isFinite(snapshot.minimumScore)
+  ) {
+    return {
+      weights: snapshot.weights,
+      minimumScore: snapshot.minimumScore,
+      minimumSectionScores: snapshot.minimumSectionScores,
+    };
+  }
+  return rubricOf(entry);
+}
+
 function isStoredAttempt(
   value: unknown,
-  assessmentById: ReadonlyMap<string, DailyAssessment>,
+  entryById: ReadonlyMap<string, AssessmentCatalogEntry>,
 ): value is StoredAttempt {
   if (!isRecord(value)) return false;
   if (
@@ -130,11 +198,11 @@ function isStoredAttempt(
     return false;
   }
 
-  const assessment = assessmentById.get(value.assessmentId);
-  if (!assessment || assessment.sessionId !== value.sessionId) return false;
+  const entry = entryById.get(value.assessmentId);
+  if (!entry || entry.sessionId !== value.sessionId) return false;
   if (
     !Array.isArray(value.retrievalAnswers) ||
-    value.retrievalAnswers.length !== assessment.retrievalQuestions.length ||
+    value.retrievalAnswers.length !== entry.retrievalCount ||
     !value.retrievalAnswers.every((answer) => typeof answer === "string")
   ) {
     return false;
@@ -143,6 +211,7 @@ function isStoredAttempt(
   if (!Number.isFinite(timestamp) || new Date(timestamp).toISOString() !== value.timestamp) {
     return false;
   }
+  const rubric = rubricForAttempt(value, entry);
   const rawScores = value.scores;
   if (!isRecord(rawScores)) return false;
   if (
@@ -153,7 +222,7 @@ function isStoredAttempt(
         typeof score === "number" &&
         Number.isFinite(score) &&
         score >= 0 &&
-        score <= assessment.scoreWeights[category]
+        score <= rubric.weights[category]
       );
     })
   ) {
@@ -178,8 +247,8 @@ function isStoredAttempt(
   const computedScore = totalScoreFor(scores);
   return (
     Math.abs(value.score - computedScore) < Number.EPSILON &&
-    value.threshold === assessment.passRule.minimumScore &&
-    value.status === computedStatusFor(draft, assessment)
+    value.threshold === rubric.minimumScore &&
+    value.status === computedStatusFor(draft, rubric, entry.retrievalCount)
   );
 }
 
@@ -189,11 +258,10 @@ function statusLabel(status: AttemptStatus): string {
   return "Thiếu bằng chứng";
 }
 
-export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
-  const firstAssessment = assessments[0];
+export function AssessmentExplorer({ catalog, initialDetail }: Props) {
+  const firstAssessment = catalog[0];
   const initialAssessment =
-    assessments.find((assessment) => assessment.sessionId === initialSessionId) ??
-    firstAssessment;
+    catalog.find((entry) => entry.sessionId === initialDetail.sessionId) ?? firstAssessment;
   const [selectedId, setSelectedId] = useState(initialAssessment?.sessionId ?? "");
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState("all");
@@ -213,63 +281,138 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
         },
   );
   const [saveMessage, setSaveMessage] = useState("");
-  const assessmentById = useMemo(
-    () => new Map(assessments.map((assessment) => [assessment.id, assessment])),
-    [assessments],
+  /**
+   * Chi tiết đã có trên client. Bài đầu tiên nằm sẵn trong payload đầu nên
+   * màn hình đầu không phải chờ mạng; các tuần khác được nạp vào đây theo chunk.
+   */
+  const [details, setDetails] = useState<AssessmentDetailMap>(() => ({
+    [initialDetail.sessionId]: initialDetail,
+  }));
+  const [detailError, setDetailError] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
+  /** Kho bản nháp theo sessionId; tồn tại qua cả việc chuyển bài lẫn reload. */
+  const draftsRef = useRef<Record<string, AssessmentDraft>>({});
+  /** Attempt cũ chưa diễn giải được bằng rubric hiện tại; luôn được ghi lại kèm. */
+  const unreadableRef = useRef<unknown[]>([]);
+  /** Chunk đã ghép vào `details`; chặn cả tải trùng lẫn vòng lặp effect. */
+  const mergedChunksRef = useRef<Set<string>>(new Set());
+  const entryById = useMemo(
+    () => new Map(catalog.map((entry) => [entry.id, entry])),
+    [catalog],
   );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const requestedSession = new URLSearchParams(window.location.search).get("session");
-      const requestedAssessment = assessments.find(
-        (assessment) => assessment.sessionId === requestedSession,
+      const requestedAssessment = catalog.find(
+        (entry) => entry.sessionId === requestedSession,
       );
-      if (!requestedAssessment) return;
-      setSelectedId(requestedAssessment.sessionId);
-      setDraft(emptyDraft(requestedAssessment));
+      // Khôi phục kho nháp trước, để deep link không ghi đè bản đang gõ dở.
+      const stored = readJson<Record<string, AssessmentDraft>>(
+        DRAFTS_STORAGE_KEY,
+        (value) => {
+          if (typeof value !== "object" || value === null) return null;
+          const record = value as { version?: unknown; drafts?: unknown };
+          if (record.version !== 1) return null;
+          if (typeof record.drafts !== "object" || record.drafts === null) return null;
+          return record.drafts as Record<string, AssessmentDraft>;
+        },
+        {},
+      );
+      draftsRef.current = stored;
+      const target = requestedAssessment ?? initialAssessment;
+      if (!target) return;
+      setSelectedId(target.sessionId);
+      setDraft(draftsRef.current[target.sessionId] ?? emptyDraft(target));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [assessments]);
+  }, [catalog, initialAssessment]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try {
-        const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-        const candidates = Array.isArray(parsed) ? parsed : [];
-        const seenAttemptIds = new Set<string>();
-        const validAttempts = candidates.filter((candidate): candidate is StoredAttempt => {
-          if (!isStoredAttempt(candidate, assessmentById)) return false;
-          if (seenAttemptIds.has(candidate.id)) return false;
+      // ASSESS-P2-02: chỉ *đọc* ở đây. Bản ghi không nhận diện được (ví dụ vì
+      // rubric đã đổi giữa hai lần phát hành) được giữ nguyên trong storage và
+      // cất vào `unreadableRef`, thay vì bị lọc rồi ghi đè mất vĩnh viễn.
+      const candidates = readJson<unknown[]>(
+        STORAGE_KEY,
+        (value) => (Array.isArray(value) ? value : null),
+        [],
+      );
+      const seenAttemptIds = new Set<string>();
+      const validAttempts: StoredAttempt[] = [];
+      const unreadable: unknown[] = [];
+      for (const candidate of candidates) {
+        if (isStoredAttempt(candidate, entryById) && !seenAttemptIds.has(candidate.id)) {
           seenAttemptIds.add(candidate.id);
-          return true;
-        });
-        setAttempts(validAttempts);
-        if (!Array.isArray(parsed) || validAttempts.length !== candidates.length) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(validAttempts));
+          validAttempts.push(candidate);
+        } else {
+          unreadable.push(candidate);
         }
-      } catch {
-        setAttempts([]);
       }
+      unreadableRef.current = unreadable;
+      setAttempts(validAttempts);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [assessmentById]);
+  }, [entryById]);
 
   const domains = useMemo(
-    () => Array.from(new Set(assessments.map((assessment) => assessment.domain))),
-    [assessments],
+    () => Array.from(new Set(catalog.map((entry) => entry.domain))),
+    [catalog],
   );
   const selected =
-    assessments.find((assessment) => assessment.sessionId === selectedId) ??
-    firstAssessment;
+    catalog.find((entry) => entry.sessionId === selectedId) ?? firstAssessment;
+  const selectedChunk = selected?.chunk;
+  const selectedDetail = selected ? details[selected.sessionId] : undefined;
+
+  /**
+   * Nạp chunk của bài đang chọn. Cả chunk được ghép vào `details` một lần, nên
+   * chuyển sang bài khác trong cùng tuần **không** phát sinh request mới; module
+   * cache còn chặn cả trường hợp quay lại tuần đã xem.
+   *
+   * `mergedChunksRef` là chốt chặn vòng lặp: nếu một chunk đã ghép mà bài đang
+   * chọn vẫn thiếu chi tiết (dữ liệu lệch giữa catalog và chunk), effect phải
+   * dừng và báo lỗi thay vì gọi lại `setDetails` vô hạn.
+   */
+  useEffect(() => {
+    if (!selectedChunk || !selectedId || details[selectedId]) return;
+    // Chunk đã ghép mà vẫn thiếu bài đang chọn nghĩa là dữ liệu lệch, không phải
+    // chậm mạng. Dừng ở đây, nếu không effect sẽ gọi lại `setDetails` vô hạn.
+    if (mergedChunksRef.current.has(selectedChunk)) return;
+    let active = true;
+    loadAssessmentChunk(selectedChunk)
+      .then((loaded) => {
+        // Ghép theo sessionId nên thứ tự phản hồi không quan trọng: hai chunk về
+        // muộn/sớm khác nhau vẫn cho cùng một kết quả, không có state race.
+        if (!active) return;
+        mergedChunksRef.current.add(selectedChunk);
+        setDetails((current) => ({ ...current, ...loaded }));
+        setDetailError(
+          loaded[selectedId]
+            ? ""
+            : "Dữ liệu tuần này không chứa phiên đang chọn. Hãy tải lại trang để lấy bản mới nhất.",
+        );
+      })
+      .catch(() => {
+        if (active) {
+          setDetailError(
+            "Không tải được nội dung chi tiết của tuần này. Bản nháp và lịch sử vẫn được giữ nguyên.",
+          );
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [details, retryToken, selectedChunk, selectedId]);
+
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("vi");
-    return assessments.filter((assessment) => {
-      const matchesKind = kind === "all" || assessment.kind === kind;
-      const matchesDomain = domain === "all" || assessment.domain === domain;
-      const haystack = `${assessment.sessionId} ${assessment.date} ${assessment.title} ${assessment.outcome} ${assessment.domain}`.toLocaleLowerCase("vi");
+    return catalog.filter((entry) => {
+      const matchesKind = kind === "all" || entry.kind === kind;
+      const matchesDomain = domain === "all" || entry.domain === domain;
+      const haystack = `${entry.sessionId} ${entry.date} ${entry.title} ${entry.outcome} ${entry.domain}`.toLocaleLowerCase("vi");
       return matchesKind && matchesDomain && (!normalized || haystack.includes(normalized));
     });
-  }, [assessments, domain, kind, query]);
+  }, [catalog, domain, kind, query]);
 
   const latestStatusBySession = useMemo(() => {
     const result = new Map<string, AttemptStatus>();
@@ -283,13 +426,16 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
     ? attempts.filter((attempt) => attempt.sessionId === selected.sessionId)
     : [];
   const totalScore = totalScoreFor(draft.scores);
-  const evidenceComplete = selected ? evidenceCompleteFor(draft, selected) : false;
-  const missingScoreCategories = selected
-    ? missingSectionScoreCategories(draft.scores, selected)
-    : [];
-  const projectedStatus: AttemptStatus = selected
-    ? computedStatusFor(draft, selected)
-    : "incomplete";
+  const selectedRubric = selected ? rubricOf(selected) : null;
+  const evidenceComplete = selected
+    ? evidenceCompleteFor(draft, selected.retrievalCount)
+    : false;
+  const missingScoreCategories =
+    selectedRubric ? missingSectionScoreCategories(draft.scores, selectedRubric) : [];
+  const projectedStatus: AttemptStatus =
+    selected && selectedRubric
+      ? computedStatusFor(draft, selectedRubric, selected.retrievalCount)
+      : "incomplete";
   const passedSessions = new Set(
     attempts.filter((attempt) => attempt.status === "passed").map((attempt) => attempt.sessionId),
   ).size;
@@ -298,12 +444,18 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
     return <p className="empty-state">Không có assessment để hiển thị.</p>;
   }
 
-  function chooseAssessment(assessment: DailyAssessment) {
-    setSelectedId(assessment.sessionId);
-    setDraft(emptyDraft(assessment));
+  /**
+   * Chuyển assessment **không** được xoá bản nháp đang gõ. Nháp của bài hiện tại
+   * được cất vào kho theo sessionId, rồi nạp lại nháp của bài đích nếu có.
+   */
+  function chooseAssessment(entry: AssessmentCatalogEntry) {
+    draftsRef.current = { ...draftsRef.current, [selectedId]: draft };
+    writeJson(DRAFTS_STORAGE_KEY, { version: 1, drafts: draftsRef.current });
+    setSelectedId(entry.sessionId);
+    setDraft(draftsRef.current[entry.sessionId] ?? emptyDraft(entry));
     setSaveMessage("");
     const url = new URL(window.location.href);
-    url.searchParams.set("session", assessment.sessionId);
+    url.searchParams.set("session", entry.sessionId);
     window.history.replaceState({}, "", url);
   }
 
@@ -343,20 +495,36 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
       sessionId: selected.sessionId,
       timestamp,
       score: totalScore,
-      threshold: selected.passRule.minimumScore,
+      threshold: selected.minimumScore,
       status: projectedStatus,
+      // Snapshot bất biến của rubric tại thời điểm nộp: lịch sử không bao giờ
+      // bị diễn giải lại bằng rubric của một phiên bản nội dung khác.
+      rubricSnapshot: {
+        version: 1,
+        weights: { ...selected.scoreWeights },
+        minimumScore: selected.minimumScore,
+        minimumSectionScores: { ...selected.minimumSectionScores },
+      },
     };
     const nextAttempts = [attempt, ...attempts];
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextAttempts));
+    // Ghi kèm cả bản ghi chưa đọc được để không xoá lịch sử của người học.
+    const status = writeJson(STORAGE_KEY, [...nextAttempts, ...unreadableRef.current]);
+    if (status === "ok") {
       setAttempts(nextAttempts);
       setSaveMessage(
         projectedStatus === "passed"
           ? `Đã lưu pass tự đánh giá lúc ${new Date(timestamp).toLocaleString("vi-VN")}.`
           : `Đã lưu attempt ở trạng thái “${statusLabel(projectedStatus)}”.`,
       );
-    } catch {
-      setSaveMessage("Không thể ghi attempt vào bộ nhớ trình duyệt này.");
+      // Nộp xong thì bản nháp của bài này không còn cần giữ.
+      const remaining = { ...draftsRef.current };
+      delete remaining[selected.sessionId];
+      draftsRef.current = remaining;
+      writeJson(DRAFTS_STORAGE_KEY, { version: 1, drafts: remaining });
+    } else {
+      setSaveMessage(
+        describeWriteStatus(status) ?? "Không thể ghi attempt vào bộ nhớ trình duyệt này.",
+      );
     }
   }
 
@@ -385,11 +553,11 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
       <div className="assessment-overview">
         <div>
           <span>NGÂN HÀNG ĐÁNH GIÁ</span>
-          <strong>{assessments.length}/{assessments.length} phiên</strong>
+          <strong>{catalog.length}/{catalog.length} phiên</strong>
         </div>
         <div>
           <span>PASS TỰ ĐÁNH GIÁ</span>
-          <strong>{passedSessions}/{assessments.length}</strong>
+          <strong>{passedSessions}/{catalog.length}</strong>
         </div>
         <div>
           <span>ATTEMPT TRÊN THIẾT BỊ</span>
@@ -435,27 +603,27 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
                 </select>
               </label>
             </div>
-            <p>{filtered.length}/{assessments.length} phiên khớp bộ lọc</p>
+            <p>{filtered.length}/{catalog.length} phiên khớp bộ lọc</p>
           </div>
           <div className="assessment-list">
-            {filtered.map((assessment) => {
-              const latestStatus = latestStatusBySession.get(assessment.sessionId);
-              const active = assessment.sessionId === selected.sessionId;
+            {filtered.map((entry) => {
+              const latestStatus = latestStatusBySession.get(entry.sessionId);
+              const active = entry.sessionId === selected.sessionId;
               return (
                 <button
                   type="button"
-                  key={assessment.id}
-                  data-assessment-item={assessment.sessionId}
+                  key={entry.id}
+                  data-assessment-item={entry.sessionId}
                   className={active ? "active" : ""}
                   aria-current={active ? "true" : undefined}
-                  onClick={() => chooseAssessment(assessment)}
+                  onClick={() => chooseAssessment(entry)}
                 >
                   <span>
-                    #{assessment.ordinal} · {assessment.date}
+                    #{entry.ordinal} · {entry.date}
                   </span>
-                  <strong>{assessment.title}</strong>
+                  <strong>{entry.title}</strong>
                   <small>
-                    {assessment.domain} · {kindLabels[assessment.kind]}
+                    {entry.domain} · {kindLabels[entry.kind]}
                     {latestStatus ? ` · ${statusLabel(latestStatus)}` : ""}
                   </small>
                 </button>
@@ -486,236 +654,265 @@ export function AssessmentExplorer({ assessments, initialSessionId }: Props) {
             </div>
           </header>
 
-          <section className="assessment-brief" aria-labelledby="coding-task-title">
-            <p className="eyebrow">NHIỆM VỤ TỰ CODE</p>
-            <h3 id="coding-task-title">Coding task</h3>
-            <p>{selected.codingTask}</p>
-            <div className="assessment-criteria-grid">
-              <details open>
-                <summary>Tiêu chí công khai ({selected.visibleCriteria.length})</summary>
-                <ul>
-                  {selected.visibleCriteria.map((criterion) => (
-                    <li key={criterion}>{criterion}</li>
-                  ))}
-                </ul>
-              </details>
-              <details>
-                <summary>Nhóm test ẩn ({selected.hiddenTestCategories.length})</summary>
-                <p>
-                  Chỉ công bố nhóm rủi ro; trang này không nhận test case, input hay expected
-                  output ẩn.
-                </p>
-                <ul>
-                  {selected.hiddenTestCategories.map((category) => (
-                    <li key={category}>{category}</li>
-                  ))}
-                </ul>
-              </details>
-            </div>
-          </section>
-
-          <form className="assessment-form" onSubmit={saveAttempt}>
-            <section>
-              <div className="form-section-title">
-                <span>01</span>
-                <div>
-                  <h3>Retrieval trước khi mở tài liệu</h3>
-                  <p>Viết câu trả lời ban đầu; nếu sửa sau khi chạy code, ghi phần sửa riêng.</p>
-                </div>
-              </div>
-              <div className="retrieval-fields">
-                {selected.retrievalQuestions.map((question, index) => (
-                  <label key={question}>
-                    <span>
-                      Câu {index + 1}. {question}
-                    </span>
-                    <textarea
-                      required
-                      value={draft.retrievalAnswers[index] ?? ""}
-                      onChange={(event) => updateRetrieval(index, event.target.value)}
-                      rows={4}
-                      placeholder="Câu trả lời của mình…"
-                    />
-                  </label>
-                ))}
-              </div>
-            </section>
-
-            <section>
-              <div className="form-section-title">
-                <span>02</span>
-                <div>
-                  <h3>Bằng chứng code</h3>
-                  <p>Dán mô tả commit/file, đoạn code cốt lõi hoặc test log do chính bạn tạo.</p>
-                </div>
-              </div>
-              <label className="wide-field">
-                <span>Bằng chứng code/test bắt buộc</span>
-                <textarea
-                  required
-                  rows={8}
-                  value={draft.codeEvidence}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, codeEvidence: event.target.value }))
-                  }
-                  placeholder="File/hàm đã viết, lệnh chạy, test đã tạo và kết quả…"
-                />
-              </label>
-              <label className="wide-field">
-                <span>Link notebook/repository/commit (không bắt buộc)</span>
-                <input
-                  type="url"
-                  value={draft.evidenceLink}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, evidenceLink: event.target.value }))
-                  }
-                  placeholder="https://…"
-                />
-              </label>
-            </section>
-
-            <section>
-              <div className="form-section-title">
-                <span>03</span>
-                <div>
-                  <h3>Giải thích bằng lời của bạn</h3>
-                  <p>{selected.explainPrompt}</p>
-                </div>
-              </div>
-              <label className="wide-field">
-                <span>Phần bảo vệ bắt buộc</span>
-                <textarea
-                  required
-                  rows={8}
-                  value={draft.explanation}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, explanation: event.target.value }))
-                  }
-                  placeholder="Data flow/shape, lý do, test biên, chi phí và failure mode…"
-                />
-              </label>
-            </section>
-
-            <section>
-              <div className="form-section-title">
-                <span>04</span>
-                <div>
-                  <h3>Tự chấm theo rubric</h3>
-                  <p>
-                    Đây là self-score thủ công. Tổng phải đạt {selected.passRule.minimumScore}/100
-                    và từng hạng mục phải đạt điểm sàn mới có thể ghi pass.
+          {!selectedDetail ? (
+            <section className="assessment-detail-pending" aria-live="polite">
+              {detailError ? (
+                <>
+                  <p className="save-message" role="status">
+                    {detailError}
                   </p>
-                </div>
-              </div>
-              <div className="score-grid">
-                {(Object.keys(selected.scoreWeights) as Array<keyof AssessmentScoreWeights>).map(
-                  (category) => (
-                    <label key={category}>
-                      <span>{scoreLabels[category]}</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={selected.scoreWeights[category]}
-                        step={1}
-                        value={draft.scores[category]}
-                        onChange={(event) =>
-                          updateScore(
-                            category,
-                            event.target.value,
-                            selected.scoreWeights[category],
-                          )
-                        }
-                      />
-                      <small>
-                        / {selected.scoreWeights[category]} · sàn{" "}
-                        {selected.passRule.minimumSectionScores[category]}
-                      </small>
-                    </label>
-                  ),
-                )}
-              </div>
-
-              <div className="assessment-confirmations">
-                <label>
-                  <input
-                    type="checkbox"
-                    required
-                    checked={draft.soloConfirmed}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        soloConfirmed: event.target.checked,
-                      }))
-                    }
-                  />
-                  <span>Tôi đã tự làm phần cốt lõi theo SOLO-90; AI chỉ kiểm tra/gợi mở.</span>
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    required
-                    checked={draft.noAutomaticFailConfirmed}
-                    onChange={(event) =>
-                      setDraft((current) => ({
-                        ...current,
-                        noAutomaticFailConfirmed: event.target.checked,
-                      }))
-                    }
-                  />
-                  <span>Tôi đã rà các điều kiện tự động trượt và chưa phát hiện vi phạm.</span>
-                </label>
-              </div>
-
-              <details className="pass-rules">
-                <summary>Quy tắc pass, auto-fail và mastery</summary>
-                <h4>Phần bắt buộc</h4>
-                <ul>
-                  {selected.passRule.requiredSections.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <h4>Tự động trượt</h4>
-                <ul>
-                  {selected.passRule.automaticFailConditions.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-                <p>
-                  <strong>Thi lại:</strong> {selected.passRule.retryRule}
-                </p>
-                <p>
-                  <strong>Mastery {selected.mastery.minimumScore}/100:</strong>{" "}
-                  {selected.mastery.delayedTransferCheck}
-                </p>
-              </details>
-
-              <div className="attempt-submit">
-                <div>
-                  <span>TỔNG ĐIỂM TỰ CHẤM</span>
-                  <strong>
-                    {totalScore}/100 · {statusLabel(projectedStatus)}
-                  </strong>
-                  {!evidenceComplete && <small>Điền đủ bằng chứng và hai xác nhận để xét pass.</small>}
-                  {evidenceComplete && totalScore < selected.passRule.minimumScore && (
-                    <small>Còn thiếu {selected.passRule.minimumScore - totalScore} điểm để xét pass.</small>
-                  )}
-                  {evidenceComplete && missingScoreCategories.length > 0 && (
-                    <small>
-                      Chưa đạt sàn: {missingScoreCategories.map((category) =>
-                        `${scoreLabels[category]} ${draft.scores[category]}/${selected.passRule.minimumSectionScores[category]}`,
-                      ).join("; ")}.
-                    </small>
-                  )}
-                </div>
-                <button type="submit">Lưu attempt trên thiết bị</button>
-              </div>
-              {saveMessage && (
-                <p className="save-message" role="status">
-                  {saveMessage}
-                </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Mở lại cửa cho chunk này rồi kích hoạt effect: thất bại
+                      // mạng không bị nhớ nên lần này sẽ fetch thật.
+                      mergedChunksRef.current.delete(selected.chunk);
+                      setRetryToken((token) => token + 1);
+                    }}
+                  >
+                    Thử tải lại
+                  </button>
+                </>
+              ) : (
+                <p role="status">Đang tải đề bài và rubric chi tiết của phiên này…</p>
               )}
             </section>
-          </form>
+          ) : (
+            <>
+              <section className="assessment-brief" aria-labelledby="coding-task-title">
+                <p className="eyebrow">NHIỆM VỤ TỰ CODE</p>
+                <h3 id="coding-task-title">Coding task</h3>
+                <p>{selectedDetail.codingTask}</p>
+                <div className="assessment-criteria-grid">
+                  <details open>
+                    <summary>Tiêu chí công khai ({selectedDetail.visibleCriteria.length})</summary>
+                    <ul>
+                      {selectedDetail.visibleCriteria.map((criterion) => (
+                        <li key={criterion}>{criterion}</li>
+                      ))}
+                    </ul>
+                  </details>
+                  <details>
+                    <summary>
+                      Nhóm test ẩn ({selectedDetail.hiddenTestCategories.length})
+                    </summary>
+                    <p>
+                      Chỉ công bố nhóm rủi ro; trang này không nhận test case, input hay expected
+                      output ẩn.
+                    </p>
+                    <ul>
+                      {selectedDetail.hiddenTestCategories.map((category) => (
+                        <li key={category}>{category}</li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              </section>
+
+              <form className="assessment-form" onSubmit={saveAttempt}>
+                <section>
+                  <div className="form-section-title">
+                    <span>01</span>
+                    <div>
+                      <h3>Retrieval trước khi mở tài liệu</h3>
+                      <p>Viết câu trả lời ban đầu; nếu sửa sau khi chạy code, ghi phần sửa riêng.</p>
+                    </div>
+                  </div>
+                  <div className="retrieval-fields">
+                    {selectedDetail.retrievalQuestions.map((question, index) => (
+                      <label key={question}>
+                        <span>
+                          Câu {index + 1}. {question}
+                        </span>
+                        <textarea
+                          required
+                          value={draft.retrievalAnswers[index] ?? ""}
+                          onChange={(event) => updateRetrieval(index, event.target.value)}
+                          rows={4}
+                          placeholder="Câu trả lời của mình…"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </section>
+
+                <section>
+                  <div className="form-section-title">
+                    <span>02</span>
+                    <div>
+                      <h3>Bằng chứng code</h3>
+                      <p>Dán mô tả commit/file, đoạn code cốt lõi hoặc test log do chính bạn tạo.</p>
+                    </div>
+                  </div>
+                  <label className="wide-field">
+                    <span>Bằng chứng code/test bắt buộc</span>
+                    <textarea
+                      required
+                      rows={8}
+                      value={draft.codeEvidence}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, codeEvidence: event.target.value }))
+                      }
+                      placeholder="File/hàm đã viết, lệnh chạy, test đã tạo và kết quả…"
+                    />
+                  </label>
+                  <label className="wide-field">
+                    <span>Link notebook/repository/commit (không bắt buộc)</span>
+                    <input
+                      type="url"
+                      value={draft.evidenceLink}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, evidenceLink: event.target.value }))
+                      }
+                      placeholder="https://…"
+                    />
+                  </label>
+                </section>
+
+                <section>
+                  <div className="form-section-title">
+                    <span>03</span>
+                    <div>
+                      <h3>Giải thích bằng lời của bạn</h3>
+                      <p>{selectedDetail.explainPrompt}</p>
+                    </div>
+                  </div>
+                  <label className="wide-field">
+                    <span>Phần bảo vệ bắt buộc</span>
+                    <textarea
+                      required
+                      rows={8}
+                      value={draft.explanation}
+                      onChange={(event) =>
+                        setDraft((current) => ({ ...current, explanation: event.target.value }))
+                      }
+                      placeholder="Data flow/shape, lý do, test biên, chi phí và failure mode…"
+                    />
+                  </label>
+                </section>
+
+                <section>
+                  <div className="form-section-title">
+                    <span>04</span>
+                    <div>
+                      <h3>Tự chấm theo rubric</h3>
+                      <p>
+                        Đây là self-score thủ công. Tổng phải đạt {selected.minimumScore}/100
+                        và từng hạng mục phải đạt điểm sàn mới có thể ghi pass.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="score-grid">
+                    {(Object.keys(selected.scoreWeights) as Array<keyof AssessmentScoreWeights>).map(
+                      (category) => (
+                        <label key={category}>
+                          <span>{scoreLabels[category]}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={selected.scoreWeights[category]}
+                            step={1}
+                            value={draft.scores[category]}
+                            onChange={(event) =>
+                              updateScore(
+                                category,
+                                event.target.value,
+                                selected.scoreWeights[category],
+                              )
+                            }
+                          />
+                          <small>
+                            / {selected.scoreWeights[category]} · sàn{" "}
+                            {selected.minimumSectionScores[category]}
+                          </small>
+                        </label>
+                      ),
+                    )}
+                  </div>
+
+                  <div className="assessment-confirmations">
+                    <label>
+                      <input
+                        type="checkbox"
+                        required
+                        checked={draft.soloConfirmed}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            soloConfirmed: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span>Tôi đã tự làm phần cốt lõi theo SOLO-90; AI chỉ kiểm tra/gợi mở.</span>
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        required
+                        checked={draft.noAutomaticFailConfirmed}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            noAutomaticFailConfirmed: event.target.checked,
+                          }))
+                        }
+                      />
+                      <span>Tôi đã rà các điều kiện tự động trượt và chưa phát hiện vi phạm.</span>
+                    </label>
+                  </div>
+
+                  <details className="pass-rules">
+                    <summary>Quy tắc pass, auto-fail và mastery</summary>
+                    <h4>Phần bắt buộc</h4>
+                    <ul>
+                      {selectedDetail.passRule.requiredSections.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                    <h4>Tự động trượt</h4>
+                    <ul>
+                      {selectedDetail.passRule.automaticFailConditions.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                    <p>
+                      <strong>Thi lại:</strong> {selectedDetail.passRule.retryRule}
+                    </p>
+                    <p>
+                      <strong>Mastery {selectedDetail.mastery.minimumScore}/100:</strong>{" "}
+                      {selectedDetail.mastery.delayedTransferCheck}
+                    </p>
+                  </details>
+
+                  <div className="attempt-submit">
+                    <div>
+                      <span>TỔNG ĐIỂM TỰ CHẤM</span>
+                      <strong>
+                        {totalScore}/100 · {statusLabel(projectedStatus)}
+                      </strong>
+                      {!evidenceComplete && <small>Điền đủ bằng chứng và hai xác nhận để xét pass.</small>}
+                      {evidenceComplete && totalScore < selected.minimumScore && (
+                        <small>Còn thiếu {selected.minimumScore - totalScore} điểm để xét pass.</small>
+                      )}
+                      {evidenceComplete && missingScoreCategories.length > 0 && (
+                        <small>
+                          Chưa đạt sàn: {missingScoreCategories.map((category) =>
+                            `${scoreLabels[category]} ${draft.scores[category]}/${selected.minimumSectionScores[category]}`,
+                          ).join("; ")}.
+                        </small>
+                      )}
+                    </div>
+                    <button type="submit">Lưu attempt trên thiết bị</button>
+                  </div>
+                  {saveMessage && (
+                    <p className="save-message" role="status">
+                      {saveMessage}
+                    </p>
+                  )}
+                </section>
+              </form>
+            </>
+          )}
 
           <section className="attempt-history" aria-labelledby="attempt-history-title">
             <div>

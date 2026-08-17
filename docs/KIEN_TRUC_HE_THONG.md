@@ -12,14 +12,19 @@ flowchart TD
     U["Người học trên trình duyệt"] --> V["Ứng dụng vinext / App Router"]
     V --> R["/roadmap · curriculum.ts"]
     V --> L["/lessons · hai catalog bài giảng"]
-    V --> A["/assessments · AssessmentExplorer"]
+    V --> M["/math · 5 module toán thi"]
+    V --> T["/theory · ngân hàng 350 câu vòng 1"]
+    V --> A["/assessments · catalog nhẹ + chunk theo tuần"]
     V --> B["/labs · mô phỏng React/canvas"]
     V --> NB["/notebooks · link GitHub/Colab"]
     V --> P["/practice · CodePractice"]
     V --> X["/resources · link nguồn ngoài"]
     R --> LS["localStorage tiến độ/attempt"]
-    A --> DA["daily-assessments.ts · 290 phiếu"]
+    A --> DA["assessment-catalog.ts · catalog 290 phiếu"]
+    A --> CH["public/data/assessments/*.json · 42 chunk chi tiết"]
     A --> LS
+    M --> LS
+    T --> LS
     P --> LS
     P --> W["pyodide-worker.js"]
     W --> CDN["jsDelivr · Pyodide 0.27.7"]
@@ -49,6 +54,11 @@ tự đánh dấu một phiên lộ trình.
 | Bài giảng lõi | `content/lessons-core.ts` | Nền tảng, khoa học dữ liệu, ML và DL |
 | Bài giảng đa phương thức | `content/lessons-multimodal.ts` | CV, NLP, Audio, video/time-series và multimodal |
 | Assessment 1:1 | `content/daily-assessments.ts` | Sinh và kiểm chứng 290 phiếu thủ công từ 290 curriculum session |
+| Tách payload assessment | `content/assessment-catalog.ts`, `content/assessment-chunk-format.ts`, `scripts/emit-assessment-chunks.mjs` | Catalog nhẹ cho payload đầu; 42 chunk JSON tĩnh cho phần chi tiết |
+| Tải chunk phía client | `lib/assessment-details.ts` | Cache theo module, gộp request trùng, từ chối dữ liệu lạ |
+| Lý thuyết vòng 1 | `content/theory/` | 350 câu, blueprint đề mock và ba trục phân loại |
+| Toán cho kỳ thi | `content/math/` | 5 module · 23 chủ đề · 69 bài luyện có đáp án số |
+| Giao diện Toán | `components/MathExplorer.tsx` | Lọc theo mức độ, render KaTeX, tự chấm bài luyện, ghi tiến độ |
 | Giao diện assessment | `components/AssessmentExplorer.tsx` | Lọc phiếu, nhập evidence/rubric, lưu nhiều attempt và xuất JSON |
 | Mô phỏng | `components/InteractiveLabs.tsx` | 6 lab tính lại trong trình duyệt |
 | Code arena | `components/CodePractice.tsx` | 5 đề executable mẫu, editor, test công khai/kiểm tra mù client-visible và ghi trạng thái đạt |
@@ -132,9 +142,55 @@ Chuỗi `hiddenTestIdeas` không được truyền sang client; client chỉ nh�
 Trạng thái chọn bài, tab và câu trả lời quiz chỉ nằm trong React state. Tải lại
 trang sẽ đặt lại; hệ thống không ghi điểm quiz vào tiến độ.
 
+### `/math`
+
+Năm module toán — đại số tuyến tính, giải tích/gradient, xác suất–thống kê, tối
+ưu, và đo lường (thông tin · chỉ số · độ phức tạp). Phạm vi được cắt theo đúng
+một tiêu chí: mỗi chủ đề phải nêu được `examUse`, tức chỗ kiến thức đó xuất hiện
+trong đề hoặc trong đoạn code phải viết. Cổng dữ liệu ở `content/math/index.ts`
+từ chối chủ đề bỏ trống trường này.
+
+Mỗi chủ đề có công thức (render bằng KaTeX **phía server**, nên đọc được cả khi
+JS chưa chạy), ví dụ giải mẫu từng bước, danh sách bẫy, và bài luyện đáp án số.
+Bài luyện chỉ mở lời giải **sau khi** người học nhập một số đọc được —
+`checkDrillAnswer` phân biệt ba trạng thái “chưa trả lời / đúng / sai”.
+
+`tests/math-content.test.mjs` tính lại độc lập toàn bộ đáp án số từ định nghĩa
+và bắt buộc mỗi bài luyện phải có một phép tính lại tương ứng, nên không thể
+thêm bài mới mà quên kiểm.
+
+Component client chỉ import `content/math/check-answer.ts` (không mang dữ liệu);
+nội dung đi qua RSC props. Import thẳng `content/math` sẽ gói cả lớp Toán vào
+bundle JS và người học tải hai lần.
+
+### `/theory`
+
+Ngân hàng 350 câu cho vòng 1, chia theo ba trục: mục syllabus, mức độ và dạng
+câu. `lib/theory-exam-state.ts` giữ toàn bộ logic thuần — `evaluateGates()` là
+**verdict duy nhất** của dự án (ba ngưỡng 75/60/50 chỉ tồn tại ở
+`MOCK_INTERNAL_GATES`), `secondsLeftUntil()` suy đồng hồ từ deadline tuyệt đối,
+và `parseActiveAttempt()` khôi phục bài đang làm sau reload. Đáp án chế độ Luyện
+tập và chế độ Thi thử được giữ trong hai kho tách hẳn nhau.
+
 ### `/assessments`
 
-Server truyền 290 record từ `DAILY_ASSESSMENTS` và chỉ chấp nhận query
+Payload đầu chỉ mang **catalog nhẹ** (`ASSESSMENT_CATALOG`): đủ để liệt kê, lọc,
+dựng bản nháp rỗng và kiểm định lịch sử attempt. Phần chi tiết — đề bài, tiêu
+chí, câu retrieval, pass rule, mastery — nằm trong 42 chunk JSON tĩnh dưới
+`public/data/assessments/`, sinh bởi `scripts/emit-assessment-chunks.mjs` trong
+mọi chế độ chạy của `scripts/run-vinext.mjs`.
+
+Chi tiết của phiên đầu tiên được gửi kèm trong payload nên màn hình đầu không
+chờ mạng; chọn một phiên khác mới kéo chunk của tuần đó, đúng một lần cho mỗi
+phiên trình duyệt. Khi chunk tải hỏng, phần tiêu đề và **lịch sử attempt vẫn
+render** còn biểu mẫu bị khoá kèm nút thử lại — bản nháp không mất.
+
+Hệ quả cần nhớ khi sửa: catalog phải luôn mang đủ `retrievalCount`,
+`scoreWeights`, `minimumScore` và `minimumSectionScores`. Thiếu chúng thì lịch sử
+attempt phụ thuộc vào mạng, và đó chính là lý do lần refactor đầu tiên phải hoàn
+nguyên.
+
+Server chỉ chấp nhận query
 `?session=<session-id>` khi ID đó tồn tại. Validation ở module nội dung kiểm tra
 quan hệ 1:1 với curriculum, ID và ngày duy nhất; validation này kiểm tra cấu
 trúc dữ liệu, không chấm bài người học.
@@ -153,8 +209,11 @@ từng hạng mục trong `minimumSectionScores`. Điểm cao ở một phần k
 cho retrieval/coding/validation/explanation dưới sàn. Đây là
 formative/manual evidence: route không thực thi code, không mở/xác minh link và
 không tự chứng minh correctness. Một session có thể giữ nhiều attempt; nút xuất
-tạo `voai-assessment-attempts.json`. Draft chưa submit chỉ ở React state và mất
-khi đổi phiếu, reload hoặc rời trang.
+tạo `voai-assessment-attempts.json`.
+
+Bản nháp chưa submit được cất theo `sessionId` vào `voai-assessment-drafts-v1`,
+nên đổi phiếu hay reload **không** làm mất phần đang gõ (ASSESS-P2-01). Nháp chỉ
+bị xoá sau khi phiếu đó đã submit thành công.
 
 ### `/labs`
 
@@ -257,7 +316,27 @@ chứng chống sửa. Component không chạy code hoặc xác minh evidence. N
 ```
 
 Trường `solo: true` là tuyên bố của luồng UI, không phải bằng chứng chống gian
-lận. Ba key không tự đồng bộ với nhau.
+lận.
+
+### `voai-assessment-drafts-v1`
+
+Kho bản nháp chưa submit, dạng `{ "version": 1, "drafts": { "<sessionId>": {…} } }`.
+Tách khỏi lịch sử attempt để hai vòng đời không giẫm lên nhau: nháp bị xoá sau
+khi submit, còn attempt thì không bao giờ bị xoá tự động.
+
+### `voai-math-mastered-v1`
+
+Mảng id chủ đề toán người học tự đánh dấu “đã nắm”. Id không còn trong nội dung
+được giữ nguyên khi ghi lại (`partitionKnownIds`), nên đổi lớp Toán không âm
+thầm xoá tiến độ cũ.
+
+### `voai-theory-attempts-v1` và `voai-theory-active-attempt-v1`
+
+Lịch sử đề mock đã nộp, và **bài đang làm dở**. Bản đang làm mang version, thứ
+tự câu và một deadline tuyệt đối, nên reload giữa giờ khôi phục đúng bài và đúng
+thời gian còn lại; dữ liệu hỏng trả về `null` thay vì làm trắng trang.
+
+Sáu key này không tự đồng bộ với nhau.
 
 ### Hệ quả vận hành
 
@@ -275,13 +354,19 @@ web chỉ là tiện ích.
 
 Luồng một lần bấm **Chạy test/Nộp bài**:
 
-1. `CodePractice` terminate worker cũ nếu còn rồi tạo một
-   `Worker("/pyodide-worker.js")` mới cho mỗi lần bấm chạy/nộp.
+1. `CodePractice` terminate worker cũ nếu còn rồi tạo một worker mới cho mỗi lần
+   bấm chạy/nộp bằng `new Worker(sitePath("/pyodide-worker.js"))`. Bắt buộc đi
+   qua `sitePath()`: trên GitHub Pages site nằm dưới `/voai-lab/`, nên đường dẫn
+   gốc `"/pyodide-worker.js"` sẽ trả 404.
 2. Nếu runtime chưa sẵn sàng, main thread gửi `init` và hiển thị trạng thái tải
    Python riêng.
-3. Worker tải/khởi tạo `pyodide.js` và runtime 0.27.7 từ jsDelivr, rồi gửi
-   thông báo `ready`; cache HTTP có thể giảm tải mạng nhưng runtime vẫn mới
-   mỗi lượt.
+3. Worker **không** dùng `importScripts`. Nó thử bản cùng origin ở
+   `public/pyodide/v0.27.7/` trước, lùi về jsDelivr sau; ở cả hai đường đều
+   `fetch` → băm SHA-384 → đối chiếu `PYODIDE_LOADER_SHA384` → **rồi mới** thực
+   thi. Băm sai bị từ chối hẳn, không fallback âm thầm. Sau đó worker gửi
+   `ready`; cache HTTP có thể giảm tải mạng nhưng runtime vẫn mới mỗi lượt.
+   Đổi `PYODIDE_VERSION` **bắt buộc** phải tính lại băm — lệnh nằm ngay trong
+   chú thích của hằng số đó.
 4. Main thread gửi `{type: "run", requestId, code, tests}` và lúc này mới bắt
    đầu bộ đếm 8 giây.
 5. Worker tạo một Python dictionary mới làm global namespace cho lượt chạy.
@@ -402,13 +487,14 @@ Không đặt API key, token, dữ liệu cá nhân hoặc đề thi bí mật t
 | `npm run build` | Vinext build thành công | Deploy thành công, link ngoài sống |
 | `npm run build:pages` + `node --test tests/pages-export.test.mjs` | Artifact tĩnh có route/asset theo contract Pages | Repository đã bật Pages hoặc job deploy đã chạy |
 | `npm test` | Build rồi chạy file test Node được khai báo | Mọi route và mọi tương tác đã được bao phủ |
+| `npm run measure:payload` | Tổng transfer ban đầu (HTML + RSC + JS khai báo trong tài liệu) ở raw/gzip/brotli | Thời gian tải thật của người dùng, hay chi phí chunk tải theo yêu cầu |
 | `py scripts/validate_notebooks.py` | Bộ 8 tệp/metadata/AST hợp lệ, không có execution history/output và đủ marker | Dependency/cell/test chạy được hoặc đáp án đúng |
 | `py -m unittest grader.tests.test_grader` | Các unit test hiện có của grader đạt | Mọi task/constraint/private case đúng |
 | HTTP 200 từng route | Server trả trang | Nút, canvas, localStorage, worker hoạt động |
 | Browser test thủ công | Hành vi đã thao tác trong browser/màn hình | Môi trường khác hoặc edge case chưa thử |
 
 Một completion audit đầy đủ cần ít nhất build, route checks, tương tác
-`/roadmap`/`/lessons`/`/assessments`/`/labs`/`/practice`, kiểm tra assessment
+`/roadmap`/`/lessons`/`/math`/`/theory`/`/assessments`/`/labs`/`/practice`, kiểm tra assessment
 manual không bị mô tả thành auto-grader, notebook structure, fresh Run All các
 notebook cần giao và unit/integration test grader. Không thay một bằng chứng
 rộng bằng một lệnh hẹp.

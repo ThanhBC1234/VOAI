@@ -237,6 +237,9 @@ notebook để suy ra rằng toàn bộ bài học, cell notebook hay website đ
   điểm, nhật ký và lịch ôn.
 - [Lý thuyết vòng 1](docs/LY_THUYET_VONG_1.md): ngân hàng 350 câu, ba trục phân
   loại, blueprint đề mock 100 câu và nguồn hiệu chỉnh theo đề công khai.
+- [Bàn giao sau audit](docs/BAN_GIAO_SAU_AUDIT.md): trạng thái 24/25 ticket đã
+  sửa, các quyết định kỹ thuật cần biết trước khi đụng vào grader/theory/storage,
+  và danh sách việc còn treo.
 - [Hệ thống đánh giá](docs/HE_THONG_DANH_GIA.md): 290 phiếu 1:1, điều kiện
   pass/mastery, minh chứng và ranh giới giữa chấm thủ công với test tự động.
 - [Kiến trúc hệ thống](docs/KIEN_TRUC_HE_THONG.md): luồng dữ liệu, lưu tiến độ,

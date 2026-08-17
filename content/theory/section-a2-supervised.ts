@@ -392,7 +392,7 @@ export const sectionA2Questions: readonly TheoryQuestion[] = [
       "Sai: khoảng cách đã cho sẵn nên không cần bàn tới thang đo ở bước này.",
     ],
     explanation:
-      "Chú ý chỉ lấy đúng k láng giềng *gần nhất*; hai điểm A ở xa (0.9 và 1.2) hoàn toàn không tham gia bỏ phiếu. Nếu dùng bỏ phiếu có trọng số 1/d, A cũng vẫn thua.",
+      "Chú ý chỉ lấy đúng k láng giềng *gần nhất*; hai điểm A ở xa (0.9 và 1.2) hoàn toàn không tham gia bỏ phiếu. Đáng chú ý là bỏ phiếu **có trọng số 1/d** lại đảo ngược kết quả: A được 1/0.1 = 10 điểm, còn B chỉ được 1/0.2 + 1/0.3 ≈ 8.33, nên A thắng. Cùng một tập láng giềng mà đổi quy tắc bỏ phiếu là đổi nhãn dự đoán — vì thế quy tắc bỏ phiếu phải được nêu rõ trong contract.",
   },
   {
     id: "knn-04",

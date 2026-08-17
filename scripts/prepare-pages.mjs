@@ -6,6 +6,7 @@ const routeNames = [
   "assessments",
   "labs",
   "lessons",
+  "math",
   "notebooks",
   "practice",
   "resources",

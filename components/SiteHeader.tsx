@@ -13,6 +13,7 @@ export function SiteHeader() {
       <nav aria-label="Điều hướng chính">
         <InternalLink href="/roadmap">Lộ trình</InternalLink>
         <InternalLink href="/lessons">Bài giảng</InternalLink>
+        <InternalLink href="/math">Toán</InternalLink>
         <InternalLink href="/theory">Lý thuyết</InternalLink>
         <InternalLink href="/assessments">Đánh giá</InternalLink>
         <InternalLink href="/labs">Phòng lab</InternalLink>

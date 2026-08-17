@@ -388,7 +388,7 @@ export const sectionCQuestions: readonly TheoryQuestion[] = [
       "IoU = 60/140 ≈ 0.4286.",
     ],
     explanation:
-      "Đối chiếu Dice = 2×60/(100+100) = 0.6 — luôn cao hơn IoU với cùng dữ liệu. Vì thế phải nêu rõ đang báo cáo chỉ số nào khi so sánh kết quả.",
+      "Đối chiếu Dice = 2×60/(100+100) = 0.6. Quan hệ chính xác là Dice = 2·IoU/(1 + IoU), nên Dice **chỉ lớn hơn** IoU khi 0 < IoU < 1; tại IoU = 0 và IoU = 1 hai chỉ số bằng nhau. Vì thế phải nêu rõ đang báo cáo chỉ số nào khi so sánh kết quả.",
   },
   {
     id: "segmentation-04",
@@ -479,7 +479,7 @@ export const sectionCQuestions: readonly TheoryQuestion[] = [
       "Sai: phi tuyến vẫn cần.",
     ],
     explanation:
-      "Đạo hàm của `y = F(x) + x` theo x có số hạng cộng bằng 1, nên gradient không thể bị triệt tiêu hoàn toàn dù mạng rất sâu.",
+      "Đạo hàm của `y = F(x) + x` theo x là `I + J_F`, tức luôn có sẵn một đường truyền thẳng qua ma trận đơn vị. Nói chính xác thì điều này **không bảo đảm** gradient không bao giờ triệt tiêu — nếu `J_F` xấp xỉ `−I` thì tổng vẫn có thể về 0 — nhưng nó khiến việc triệt tiêu khó xảy ra hơn hẳn so với chuỗi nhân thuần, và đó là lý do mạng rất sâu trở nên huấn luyện được.",
   },
   {
     id: "vision-encoders-03",

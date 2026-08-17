@@ -181,7 +181,7 @@ export const sectionEQuestions: readonly TheoryQuestion[] = [
     answer: 5,
     tolerance: 0.001,
     calculation: ["‖v‖₂ = √(3² + 4²).", "= √(9 + 16) = √25 = 5."],
-    explanation: "Chuẩn L2 là độ dài hình học của vector. Chuẩn hoá L2 (chia vector cho độ dài của nó) là bước bắt buộc trước khi so sánh embedding bằng cosine.",
+    explanation: "Chuẩn L2 là độ dài hình học của vector. Lưu ý cosine similarity đã tự chia cho tích hai chuẩn nên **không bắt buộc** chuẩn hoá trước; việc chuẩn hoá sẵn chỉ hữu ích khi muốn thay cosine bằng dot product cho rẻ, hoặc khi lập chỉ mục truy vấn vector.",
     calibratedFrom: NOAI_SG,
   },
   {
@@ -193,7 +193,7 @@ export const sectionEQuestions: readonly TheoryQuestion[] = [
     answer: -2,
     tolerance: 0.001,
     calculation: ["Với ma trận 2×2 [[a, b], [c, d]]: det = ad − bc.", "= 1×4 − 2×3 = 4 − 6 = −2."],
-    explanation: "Định thức khác 0 nghĩa là ma trận khả nghịch. Định thức bằng 0 tương ứng ma trận suy biến — đúng trường hợp khiến nghiệm chuẩn của hồi quy tuyến tính không tồn tại.",
+    explanation: "Định thức khác 0 nghĩa là ma trận khả nghịch. Khi det(XᵀX) = 0, ma trận suy biến nên **công thức nghịch đảo** `(XᵀX)⁻¹Xᵀy` không dùng được và nghiệm không còn duy nhất — nhưng bài toán bình phương tối thiểu vẫn *có* nghiệm; ta lấy một nghiệm qua giả nghịch đảo hoặc thêm regularization.",
     calibratedFrom: NOAI_SG,
   },
 
@@ -737,14 +737,14 @@ export const sectionEQuestions: readonly TheoryQuestion[] = [
     stem: "Thuật toán O(n²) xử lý n = 100.000 phần tử. Vì sao nó thường không khả thi trong khi O(n log n) thì được?",
     choices: [
       "Vì O(n²) cần nhiều bộ nhớ hơn.",
-      "Vì n² = 10¹⁰ phép tính, lớn hơn khoảng sáu bậc độ lớn so với n·log₂n ≈ 1.7 × 10⁶.",
+      "Vì n² = 10¹⁰ phép tính, lớn hơn gần bốn bậc độ lớn so với n·log₂n ≈ 1.7 × 10⁶.",
       "Vì O(n²) không chạy được trên máy 64-bit.",
       "Vì O(n log n) luôn dùng ít bộ nhớ hơn.",
     ],
     answerIndex: 1,
     choiceNotes: [
       "Sai: độ phức tạp ở đây nói về thời gian, không phải bộ nhớ.",
-      "Đúng: ước lượng bậc độ lớn cho thấy khác biệt là hàng triệu lần.",
+      "Đúng: 10¹⁰ / (1.7 × 10⁶) ≈ 5.9 × 10³, tức khoảng 3.8 bậc độ lớn — gần sáu nghìn lần.",
       "Sai: không có giới hạn kiến trúc nào như vậy.",
       "Sai: hai khái niệm độc lập nhau.",
     ],

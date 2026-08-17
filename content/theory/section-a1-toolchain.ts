@@ -575,19 +575,19 @@ export const sectionA1Questions: readonly TheoryQuestion[] = [
     stem: "Khác biệt cốt lõi giữa `x.view(...)` và `x.reshape(...)` trong PyTorch là gì?",
     choices: [
       "`view` sao chép dữ liệu, `reshape` thì không.",
-      "`view` yêu cầu tensor liền khối trong bộ nhớ (contiguous) và luôn trả về view; `reshape` có thể sao chép khi cần.",
+      "`view` yêu cầu shape mới tương thích với size/stride hiện tại và luôn trả về view; `reshape` có thể sao chép khi cần.",
       "`view` chỉ dùng cho tensor 2 chiều.",
       "Hai hàm hoàn toàn tương đương, chỉ khác tên gọi.",
     ],
     answerIndex: 1,
     choiceNotes: [
       "Sai: ngược lại — `view` mới là hàm không sao chép.",
-      "Đúng: sau `transpose`/`permute`, tensor thường không còn contiguous nên `view` báo lỗi.",
+      "Đúng: sau `transpose`/`permute`, shape mong muốn thường không còn tương thích với stride nên `view` báo lỗi.",
       "Sai: `view` dùng cho số chiều bất kỳ.",
       "Sai: khác biệt về contiguous là thật và gây lỗi runtime.",
     ],
     explanation:
-      "Gặp lỗi “view size is not compatible with input tensor's size and stride”, cách xử lý là `x.contiguous().view(...)` hoặc dùng thẳng `reshape`.",
+      "Nói cho chính xác: điều kiện của `view` là shape mới **tương thích với size/stride**, không phải “tensor bắt buộc phải contiguous”. Nhiều tensor không contiguous vẫn `view` được nếu shape yêu cầu hợp với stride sẵn có — ví dụ tensor đã `transpose` vẫn view được sang shape giữ nguyên bố cục. Gặp lỗi “view size is not compatible with input tensor's size and stride”, cách xử lý là `x.contiguous().view(...)` hoặc dùng thẳng `reshape`.",
   },
   {
     id: "tensor-03",

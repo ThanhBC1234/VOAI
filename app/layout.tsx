@@ -10,7 +10,17 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const dynamic = "force-static";
 
-const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://voai-lab-2027.dixmilsapin.chatgpt.site";
+/**
+ * SEO-P3-01: fallback phải là URL **công khai**.
+ *
+ * Trước đây khi thiếu `NEXT_PUBLIC_SITE_URL`, metadata trỏ tới một host xem
+ * trước yêu cầu đăng nhập; kiểm tra ẩn danh trả HTTP 401, nên mọi social
+ * crawler đều không lấy được ảnh. Cả hai workflow đều truyền biến này (CI dùng
+ * `github.repository_owner`, Pages dùng `configure-pages`), nên fallback chỉ là
+ * lưới an toàn cho bản dựng cục bộ — và vẫn phải là URL ai cũng mở được.
+ */
+const DEFAULT_PUBLIC_SITE_URL = "https://ditruyenhungvuong.github.io/voai-lab";
+const publicSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? DEFAULT_PUBLIC_SITE_URL;
 const metadataBase = new URL(publicSiteUrl);
 const socialImage = new URL(sitePath("/og.png"), metadataBase).toString();
 const title = "VOAI Lab — Lộ trình AI từ nền tảng đến thi đấu";

@@ -4,6 +4,7 @@ import {
   DAILY_ASSESSMENTS,
   DAILY_ASSESSMENTS_VALIDATION,
 } from "../../content/daily-assessments";
+import { ASSESSMENT_CATALOG, detailOf } from "../../content/assessment-catalog";
 
 export const metadata: Metadata = {
   title: "Đánh giá 290 phiên — VOAI Lab",
@@ -12,6 +13,17 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-static";
+
+/**
+ * PERF-P3-01: chỉ catalog nhẹ đi vào HTML/RSC. Chi tiết của bài đầu tiên được
+ * gửi kèm để màn hình đầu không phải chờ mạng; 289 bài còn lại nằm trong chunk
+ * JSON tĩnh theo tuần và chỉ tải khi người học chọn tới.
+ */
+const firstAssessment = DAILY_ASSESSMENTS[0];
+if (!firstAssessment) {
+  throw new Error("Ngân hàng assessment rỗng; trang /assessments không thể render.");
+}
+const initialDetail = detailOf(firstAssessment);
 
 export default function AssessmentsPage() {
   return (
@@ -41,9 +53,7 @@ export default function AssessmentsPage() {
           </small>
         </div>
       </header>
-      <AssessmentExplorer
-        assessments={DAILY_ASSESSMENTS}
-      />
+      <AssessmentExplorer catalog={ASSESSMENT_CATALOG} initialDetail={initialDetail} />
     </main>
   );
 }

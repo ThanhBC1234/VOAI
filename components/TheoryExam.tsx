@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { RichText } from "./RichText";
 import {
   DIFFICULTY_LEVELS,
   DIFFICULTY_PROFILES,
@@ -12,6 +13,16 @@ import {
   type PaperSection,
   type TheoryQuestion,
 } from "../content/theory/types";
+import {
+  ACTIVE_ATTEMPT_STORAGE_KEY,
+  activeAttemptIsUsable,
+  createActiveAttempt,
+  evaluateGates,
+  formatClock,
+  parseActiveAttempt,
+  secondsLeftUntil,
+  type ActiveAttempt,
+} from "../lib/theory-exam-state";
 
 const STORAGE_KEY = "voai-theory-attempts-v1";
 
@@ -101,19 +112,27 @@ function AnswerFields({
   locked: boolean;
 }) {
   switch (question.format) {
+    // A11Y-P2-01: một đáp án đúng ⇒ radiogroup, nhiều đáp án ⇒ checkbox. Trước
+    // đây tất cả đều là <button>, nên trình đọc màn hình không đọc được trạng
+    // thái chọn lẫn quan hệ nhóm.
     case "single-choice":
       return (
-        <div className="theory-choices">
+        <div className="theory-choices" role="radiogroup" aria-label="Chọn một đáp án">
           {question.choices.map((choice, index) => (
             <button
               type="button"
               key={choice}
+              role="radio"
+              aria-checked={response === index}
+              aria-disabled={locked || undefined}
               disabled={locked}
               className={response === index ? "picked" : ""}
               onClick={() => onChange(index)}
             >
-              <span>{String.fromCharCode(65 + index)}</span>
-              <em>{choice}</em>
+              <span aria-hidden="true">{String.fromCharCode(65 + index)}</span>
+              <em>
+                <RichText>{choice}</RichText>
+              </em>
             </button>
           ))}
         </div>
@@ -127,6 +146,9 @@ function AnswerFields({
             <button
               type="button"
               key={choice}
+              role="checkbox"
+              aria-checked={picked.includes(index)}
+              aria-disabled={locked || undefined}
               disabled={locked}
               className={picked.includes(index) ? "picked" : ""}
               onClick={() =>
@@ -137,8 +159,10 @@ function AnswerFields({
                 )
               }
             >
-              <span>{picked.includes(index) ? "✓" : ""}</span>
-              <em>{choice}</em>
+              <span aria-hidden="true">{picked.includes(index) ? "✓" : ""}</span>
+              <em>
+                <RichText>{choice}</RichText>
+              </em>
             </button>
           ))}
         </div>
@@ -150,12 +174,17 @@ function AnswerFields({
         <div className="theory-tf">
           {question.statements.map((statement, index) => (
             <div key={statement.text}>
-              <p>
-                <b>{String.fromCharCode(97 + index)})</b> {statement.text}
+              <p id={`tf-${question.id}-${index}`}>
+                <b>{String.fromCharCode(97 + index)})</b> <RichText>{statement.text}</RichText>
               </p>
-              <div>
+              {/* Mỗi mệnh đề là một radiogroup Đúng/Sai riêng, gắn nhãn bằng
+                  chính nội dung mệnh đề để trình đọc màn hình đọc đủ ngữ cảnh. */}
+              <div role="radiogroup" aria-labelledby={`tf-${question.id}-${index}`}>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={picked[index] === true}
+                  aria-disabled={locked || undefined}
                   disabled={locked}
                   className={picked[index] === true ? "picked" : ""}
                   onClick={() => {
@@ -168,6 +197,9 @@ function AnswerFields({
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={picked[index] === false}
+                  aria-disabled={locked || undefined}
                   disabled={locked}
                   className={picked[index] === false ? "picked" : ""}
                   onClick={() => {
@@ -232,7 +264,8 @@ function Review({ question, response }: { question: TheoryQuestion; response: Re
                 : question.answerIndexes.includes(index);
             return (
               <li key={choice} className={isAnswer ? "is-answer" : ""}>
-                <b>{String.fromCharCode(65 + index)}.</b> {question.choiceNotes[index]}
+                <b>{String.fromCharCode(65 + index)}.</b>{" "}
+                <RichText>{question.choiceNotes[index]}</RichText>
               </li>
             );
           })}
@@ -246,7 +279,7 @@ function Review({ question, response }: { question: TheoryQuestion; response: Re
               <b>
                 {String.fromCharCode(97 + index)}) {statement.answer ? "Đúng" : "Sai"} —
               </b>{" "}
-              {statement.note}
+              <RichText>{statement.note}</RichText>
             </li>
           ))}
         </ul>
@@ -268,15 +301,19 @@ function Review({ question, response }: { question: TheoryQuestion; response: Re
       {question.calculation ? (
         <ol className="theory-calc">
           {question.calculation.map((step) => (
-            <li key={step}>{step}</li>
+            <li key={step}>
+              <RichText>{step}</RichText>
+            </li>
           ))}
         </ol>
       ) : null}
 
-      <p>{question.explanation}</p>
+      <p>
+        <RichText>{question.explanation}</RichText>
+      </p>
       {question.trap ? (
         <p className="theory-trap">
-          <b>Bẫy:</b> {question.trap}
+          <b>Bẫy:</b> <RichText>{question.trap}</RichText>
         </p>
       ) : null}
       {question.calibratedFrom ? <small>{question.calibratedFrom}</small> : null}
@@ -306,6 +343,15 @@ function QuestionCard({
   examMode: boolean;
 }) {
   const answered = hasCompleteResponse(question, response);
+  /**
+   * Cấp heading phải khớp ngữ cảnh, không cố định.
+   *
+   * Chế độ Luyện đặt thẻ câu hỏi ngay dưới `<h1>` của trang, nên đề bài là
+   * `h2`. Chế độ Thi thử có thêm `<h2>Đề mock …</h2>` bao ngoài, nên đề bài
+   * xuống `h3`. Cố định một cấp sẽ tạo bước nhảy h1→h3 ở chế độ Luyện — trình
+   * đọc màn hình hiểu là có một mục cha bị thiếu.
+   */
+  const Stem = examMode ? "h3" : "h2";
   return (
     <article className="theory-card" id={`theory-${question.id}`}>
       <div className="theory-meta">
@@ -317,7 +363,9 @@ function QuestionCard({
         <span>{FORMAT_LABELS[question.format]}</span>
         <span className="theory-points">{pointsFor(question)} điểm</span>
       </div>
-      <h3>{question.stem}</h3>
+      <Stem>
+        <RichText>{question.stem}</RichText>
+      </Stem>
       <AnswerFields
         question={question}
         response={response}
@@ -348,23 +396,36 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
   const [section, setSection] = useState<string>("Tất cả");
   const [level, setLevel] = useState<string>("Tất cả");
   const [query, setQuery] = useState("");
-  const [responses, setResponses] = useState<Record<string, Response>>({});
-  const responsesRef = useRef<Record<string, Response>>({});
+  // THEORY-P1-01: hai chế độ giữ đáp án riêng biệt. Trước đây dùng chung một
+  // `responses`, nên trả lời ở Luyện tập sẽ tự điền vào bài thi đang mở.
+  const [practiceResponses, setPracticeResponses] = useState<Record<string, Response>>({});
+  const [examResponses, setExamResponses] = useState<Record<string, Response>>({});
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
-  const [examStarted, setExamStarted] = useState(false);
-  const [examSubmitted, setExamSubmitted] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(MOCK_DURATION_MINUTES * 60);
+  const [attempt, setAttempt] = useState<ActiveAttempt | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [attempts, setAttempts] = useState<StoredAttempt[]>([]);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const submittedRef = useRef(false);
+  const examResponsesRef = useRef<Record<string, Response>>({});
+  const submittingRef = useRef(false);
 
   const byId = useMemo(() => new Map(questions.map((q) => [q.id, q])), [questions]);
-  const paper = useMemo(
-    () => paperIds.map((id) => byId.get(id)).filter((q): q is TheoryQuestion => Boolean(q)),
-    [paperIds, byId],
-  );
+  const knownIds = useMemo(() => new Set(questions.map((q) => q.id)), [questions]);
+  // Đề của attempt là snapshot cố định lúc bắt đầu; ngoài attempt thì dùng đề mẫu.
+  const paper = useMemo(() => {
+    const ids = attempt ? attempt.questionIds : paperIds;
+    return ids.map((id) => byId.get(id)).filter((q): q is TheoryQuestion => Boolean(q));
+  }, [attempt, paperIds, byId]);
 
+  const persistAttempt = useCallback((next: ActiveAttempt | null) => {
+    try {
+      if (next) localStorage.setItem(ACTIVE_ATTEMPT_STORAGE_KEY, JSON.stringify(next));
+      else localStorage.removeItem(ACTIVE_ATTEMPT_STORAGE_KEY);
+    } catch {
+      /* storage bị chặn hoặc đầy: attempt vẫn chạy tiếp trong phiên này. */
+    }
+  }, []);
+
+  // Khôi phục lịch sử và attempt đang làm dở (THEORY-P1-03).
   useEffect(() => {
     const timer = window.setTimeout(() => {
       try {
@@ -373,9 +434,27 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
       } catch {
         setAttempts([]);
       }
+      let raw: string | null = null;
+      try {
+        raw = localStorage.getItem(ACTIVE_ATTEMPT_STORAGE_KEY);
+      } catch {
+        raw = null;
+      }
+      const restored = parseActiveAttempt(raw);
+      if (restored && !restored.submitted && activeAttemptIsUsable(restored, knownIds)) {
+        setAttempt(restored);
+        const responses = restored.responses as Record<string, Response>;
+        setExamResponses(responses);
+        examResponsesRef.current = responses;
+        setMode("exam");
+      } else if (restored) {
+        // Attempt đã nộp hoặc tham chiếu câu không còn tồn tại: dọn, không crash.
+        persistAttempt(null);
+      }
+      setNowMs(Date.now());
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [knownIds, persistAttempt]);
 
   const filtered = useMemo(
     () =>
@@ -388,10 +467,19 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
     [questions, section, level, query, sectionOf],
   );
 
-  const setResponse = (id: string, value: Response) =>
-    setResponses((current) => {
+  const setPracticeResponse = (id: string, value: Response) =>
+    setPracticeResponses((current) => ({ ...current, [id]: value }));
+
+  const setExamResponse = (id: string, value: Response) =>
+    setExamResponses((current) => {
       const next = { ...current, [id]: value };
-      responsesRef.current = next;
+      examResponsesRef.current = next;
+      setAttempt((activeAttempt) => {
+        if (!activeAttempt || activeAttempt.submitted) return activeAttempt;
+        const updated = { ...activeAttempt, responses: next as Record<string, unknown> };
+        persistAttempt(updated);
+        return updated;
+      });
       return next;
     });
 
@@ -403,10 +491,15 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
     });
 
   const submitExam = useCallback(() => {
-    if (submittedRef.current) return;
-    submittedRef.current = true;
-    setExamSubmitted(true);
-    if (timerRef.current) clearInterval(timerRef.current);
+    // Chống nộp hai lần khi hết giờ trùng lúc người dùng bấm nộp.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setAttempt((current) => {
+      if (!current) return current;
+      const closed = { ...current, submitted: true };
+      persistAttempt(closed);
+      return closed;
+    });
 
     const bySection: Record<string, { correct: number; total: number }> = {};
     const byDifficulty: Record<string, { correct: number; total: number }> = {};
@@ -415,7 +508,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
     let correctCount = 0;
 
     for (const question of paper) {
-      const ok = isCorrect(question, responsesRef.current[question.id] ?? null);
+      const ok = isCorrect(question, examResponsesRef.current[question.id] ?? null);
       const sectionKey = sectionOf[question.id];
       bySection[sectionKey] ??= { correct: 0, total: 0 };
       byDifficulty[question.difficulty] ??= { correct: 0, total: 0 };
@@ -430,7 +523,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
       }
     }
 
-    const attempt: StoredAttempt = {
+    const finished: StoredAttempt = {
       seed: 1,
       finishedAt: new Date().toISOString(),
       scorePercent: possible > 0 ? Math.round((earned / possible) * 100) : 0,
@@ -439,56 +532,92 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
       bySection,
       byDifficulty,
     };
-    const next = [attempt, ...attempts].slice(0, 20);
-    setAttempts(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* localStorage đầy hoặc bị chặn: kết quả vẫn hiển thị trong phiên này. */
-    }
-  }, [attempts, paper, sectionOf]);
+    setAttempts((current) => {
+      const next = [finished, ...current].slice(0, 20);
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* localStorage đầy hoặc bị chặn: kết quả vẫn hiển thị trong phiên này. */
+      }
+      return next;
+    });
+  }, [paper, sectionOf, persistAttempt]);
 
   const submitExamRef = useRef(submitExam);
   useEffect(() => {
     submitExamRef.current = submitExam;
   }, [submitExam]);
 
+  // Đồng hồ chỉ *đọc* thời gian thực; deadline tuyệt đối nằm trong attempt nên
+  // tab bị throttle hay máy sleep không làm bài thi dài thêm (THEORY-P2-01).
+  const examRunning = Boolean(attempt) && !attempt?.submitted;
   useEffect(() => {
-    if (!examStarted || examSubmitted) return;
-    timerRef.current = setInterval(() => {
-      setSecondsLeft((current) => {
-        if (current <= 1) {
-          window.setTimeout(() => submitExamRef.current(), 0);
-          return 0;
-        }
-        return current - 1;
-      });
-    }, 1000);
+    if (!examRunning) return;
+    const tick = () => setNowMs(Date.now());
+    const timer = window.setInterval(tick, 500);
+    document.addEventListener("visibilitychange", tick);
+    window.addEventListener("focus", tick);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+      window.removeEventListener("focus", tick);
     };
-  }, [examStarted, examSubmitted]);
+  }, [examRunning]);
 
-  function restartExam() {
-    if (timerRef.current) clearInterval(timerRef.current);
-    submittedRef.current = false;
-    setResponses((current) => {
-      const next = { ...current };
-      for (const question of paper) delete next[question.id];
-      responsesRef.current = next;
-      return next;
-    });
-    setExamStarted(false);
-    setExamSubmitted(false);
-    setSecondsLeft(MOCK_DURATION_MINUTES * 60);
+  const secondsLeft = attempt
+    ? secondsLeftUntil(attempt.deadlineEpochMs, nowMs)
+    : MOCK_DURATION_MINUTES * 60;
+
+  // Hết giờ thì tự chốt đúng một lần, kể cả khi vừa reload sau deadline.
+  useEffect(() => {
+    if (examRunning && secondsLeft === 0) submitExamRef.current();
+  }, [examRunning, secondsLeft]);
+
+  function startExam() {
+    submittingRef.current = false;
+    const fresh = createActiveAttempt(
+      paperIds,
+      Date.now(),
+      `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    );
+    setExamResponses({});
+    examResponsesRef.current = {};
+    setAttempt(fresh);
+    persistAttempt(fresh);
+    setNowMs(Date.now());
+  }
+
+  function discardAttempt() {
+    submittingRef.current = false;
+    setAttempt(null);
+    setExamResponses({});
+    examResponsesRef.current = {};
+    persistAttempt(null);
+  }
+
+  /** Rời bài thi đang chạy phải có xác nhận; Cancel giữ nguyên bài và deadline. */
+  function requestPracticeMode() {
+    if (examRunning) {
+      const confirmed = window.confirm(
+        "Bạn đang có một bài thi chưa nộp. Chuyển sang Luyện tập sẽ hủy bài thi này và xóa mọi câu đã trả lời. Tiếp tục?",
+      );
+      if (!confirmed) return;
+      discardAttempt();
+    }
+    setMode("practice");
   }
 
   const latest = attempts[0];
-  const clock = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(
-    secondsLeft % 60,
-  ).padStart(2, "0")}`;
+  const verdict = latest
+    ? evaluateGates({
+        scorePercent: latest.scorePercent,
+        bySection: latest.bySection,
+        byDifficulty: latest.byDifficulty,
+      })
+    : null;
+  const clock = formatClock(secondsLeft);
   const answeredCount = paper.filter((q) =>
-    hasCompleteResponse(q, responses[q.id] ?? null),
+    hasCompleteResponse(q, examResponses[q.id] ?? null),
   ).length;
 
   return (
@@ -497,7 +626,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
         <button
           type="button"
           className={mode === "practice" ? "active" : ""}
-          onClick={() => setMode("practice")}
+          onClick={requestPracticeMode}
         >
           Luyện theo chủ đề
         </button>
@@ -551,8 +680,8 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                 question={question}
                 index={index}
                 section={sectionOf[question.id]}
-                response={responses[question.id] ?? null}
-                onChange={(value) => setResponse(question.id, value)}
+                response={practiceResponses[question.id] ?? null}
+                onChange={(value) => setPracticeResponse(question.id, value)}
                 revealed={revealed.has(question.id)}
                 onReveal={() => reveal(question.id)}
                 examMode={false}
@@ -570,7 +699,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
         </>
       ) : (
         <div className="theory-exam">
-          {!examStarted ? (
+          {!attempt ? (
             <div className="theory-start">
               <h2>Đề mock {paper.length} câu · {MOCK_DURATION_MINUTES} phút</h2>
               <p>
@@ -590,7 +719,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                   câu) — {new Date(latest.finishedAt).toLocaleString("vi-VN")}
                 </p>
               ) : null}
-              <button type="button" className="primary-button" onClick={() => setExamStarted(true)}>
+              <button type="button" className="primary-button" onClick={startExam}>
                 Bắt đầu tính giờ →
               </button>
             </div>
@@ -601,7 +730,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                 <span>
                   Đã trả lời {answeredCount}/{paper.length}
                 </span>
-                {!examSubmitted ? (
+                {!attempt.submitted ? (
                   <button type="button" onClick={submitExam}>
                     Nộp bài
                   </button>
@@ -610,19 +739,27 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                 )}
               </div>
 
-              {examSubmitted && latest ? (
+              {attempt.submitted && latest && verdict ? (
                 <div className="theory-result">
                   <div className="theory-score">
                     <strong>{latest.scorePercent}%</strong>
                     <span>
                       {latest.correct}/{latest.total} câu đúng
                     </span>
-                    <em>
-                      {latest.scorePercent >= MOCK_INTERNAL_GATES.passPercent
-                        ? "Đạt ngưỡng nội bộ"
-                        : "Chưa đạt ngưỡng nội bộ"}
+                    <em data-theory-verdict={verdict.passed ? "pass" : "fail"}>
+                      {verdict.passed ? "Đạt ngưỡng nội bộ" : "Chưa đạt ngưỡng nội bộ"}
                     </em>
                   </div>
+                  {verdict.failures.length > 0 ? (
+                    <ul className="theory-gate-failures" aria-label="Các ngưỡng chưa đạt">
+                      {verdict.failures.map((failure) => (
+                        <li key={`${failure.gate}-${failure.label}`}>
+                          <b>{failure.label}</b> đạt {Math.round(failure.actualPercent)}%, cần ≥{" "}
+                          {failure.requiredPercent}%
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <div className="theory-breakdown">
                     <h3>Theo khối</h3>
                     {Object.entries(latest.bySection).map(([key, value]) => {
@@ -656,7 +793,7 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                     Ghi error ledger cho từng câu sai: mã câu, chủ đề, loại lỗi (chưa thuộc /
                     hiểu sai / tính sai / sập bẫy) và câu sửa lại bằng lời của mình.
                   </p>
-                  <button type="button" className="theory-reveal" onClick={restartExam}>
+                  <button type="button" className="theory-reveal" onClick={discardAttempt}>
                     Làm lại đề mẫu
                   </button>
                 </div>
@@ -669,11 +806,11 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
                     question={question}
                     index={index}
                     section={sectionOf[question.id]}
-                    response={responses[question.id] ?? null}
-                    onChange={(value) => setResponse(question.id, value)}
-                    revealed={examSubmitted}
+                    response={examResponses[question.id] ?? null}
+                    onChange={(value) => setExamResponse(question.id, value)}
+                    revealed={Boolean(attempt?.submitted)}
                     onReveal={() => undefined}
-                    examMode={!examSubmitted}
+                    examMode={!attempt?.submitted}
                   />
                 ))}
               </div>

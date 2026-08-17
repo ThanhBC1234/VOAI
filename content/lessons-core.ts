@@ -359,7 +359,7 @@ export const coreLessons: CoreLesson[] = [
       { symptom: "Feature nhiều mức luôn quan trọng", cause: "Nhiều candidate split tạo bias", fix: "Permutation importance trên validation" },
       { symptom: "Kết quả thay đổi khi đổi thứ tự cột", cause: "Tie split không quy định", fix: "Tie-break tất định" },
     ],
-    complexity: { time: "Naive O(nd^2); sort+scan khoảng O(d n log n) mỗi tầng", space: "O(n+d+nodes)", notes: "Cây cân bằng predict O(log leaves), cây lệch O(depth)." },
+    complexity: { time: "Naive O(d n^2) mỗi tầng (mỗi feature thử n ngưỡng, mỗi ngưỡng quét n mẫu); sort+scan hạ xuống khoảng O(d n log n)", space: "O(n+d+nodes)", notes: "Cây cân bằng predict O(log leaves), cây lệch O(depth)." },
     miniQuiz: [
       { question: "Gini bằng 0 nghĩa là gì?", choices: ["Node cân bằng", "Node chỉ có một lớp", "Không có mẫu", "Depth bằng 0"], correctIndex: 1, explanation: "Một p_c=1 và phần còn lại 0 làm tổng bình phương bằng 1." },
       { question: "Greedy split có đảm bảo cây nhỏ tốt nhất toàn cục?", choices: ["Có", "Không", "Chỉ với Gini", "Chỉ với hai lớp"], correctIndex: 1, explanation: "Lựa chọn cục bộ có thể chặn cấu trúc tốt hơn về sau." },
@@ -1980,7 +1980,7 @@ export const coreLessons: CoreLesson[] = [
     ],
     complexity: { time: "Mỗi block O(B*T^2*d + B*T*d*d_ff)", space: "O(B*H*T^2 + activations)", notes: "ViT token count tăng bốn lần khi mỗi chiều ảnh gấp đôi." },
     miniQuiz: [
-      { question: "Vì sao cần positional encoding?", choices: ["Attention tự biết tuyệt đối thứ tự", "Self-attention cơ bản bất biến với hoán vị nếu không có vị trí", "Để giảm lớp", "Để thay loss"], correctIndex: 1, explanation: "Q/K/V từ token content không chứa vị trí theo mặc định." },
+      { question: "Vì sao cần positional encoding?", choices: ["Attention tự biết tuyệt đối thứ tự", "Self-attention cơ bản tương đương với hoán vị (permutation-equivariant) nếu không có vị trí", "Để giảm lớp", "Để thay loss"], correctIndex: 1, explanation: "Q/K/V từ token content không chứa vị trí theo mặc định. Chính xác là equivariant chứ không phải invariant: hoán vị token đầu vào thì output theo từng token cũng hoán vị y hệt, nên mô hình không phân biệt được trật tự." },
       { question: "Ảnh 224x224, patch 16x16 có bao nhiêu patch token?", choices: ["14", "196", "256", "50176"], correctIndex: 1, explanation: "14 patch mỗi chiều, tổng 14*14=196 trước special token." },
     ],
     codingChallenge: {
