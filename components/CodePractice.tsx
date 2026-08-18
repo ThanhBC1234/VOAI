@@ -66,6 +66,23 @@ type RunResult = { ok: boolean; output: string[]; details?: {name:string;passed:
  */
 const BOOT_TIMEOUT_MS = 60_000;
 
+/** Kho bản nháp code của Code Arena, tách theo từng bài. */
+const ARENA_DRAFTS_KEY="voai-arena-drafts-v1";
+
+/** Đọc kho nháp; dữ liệu hỏng trả về rỗng chứ không ném. */
+function readArenaDrafts():Record<string,string>{
+  return readJson<Record<string,string>>(ARENA_DRAFTS_KEY,value=>{
+    if(typeof value!=="object"||value===null||Array.isArray(value)) return null;
+    const record=value as {version?:unknown;drafts?:unknown};
+    if(record.version!==1) return null;
+    if(typeof record.drafts!=="object"||record.drafts===null) return null;
+    const drafts=record.drafts as Record<string,unknown>;
+    const clean:Record<string,string>={};
+    for(const [key,text] of Object.entries(drafts)) if(typeof text==="string") clean[key]=text;
+    return clean;
+  },{});
+}
+
 export function CodePractice() {
   const [exerciseId,setExerciseId]=useState(exercises[0].id);
   const exercise=exercises.find(item=>item.id===exerciseId) ?? exercises[0];
@@ -76,12 +93,47 @@ export function CodePractice() {
   const workerRef=useRef<Worker|null>(null);
   const timeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
   const bootTimeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
+  /**
+   * Bản nháp theo từng bài. Trước đây code chỉ nằm trong React state nên đổi
+   * bài, bấm "Khôi phục" hay tải lại trang là **mất trắng** phần đang gõ — đây
+   * là mất bài làm thật của người học, không phải phiền toái nhỏ.
+   */
+  const draftsRef=useRef<Record<string,string>>({});
 
   useEffect(()=>()=>{ workerRef.current?.terminate(); if(timeoutRef.current) clearTimeout(timeoutRef.current); if(bootTimeoutRef.current) clearTimeout(bootTimeoutRef.current); },[]);
 
+  // Khôi phục bản nháp sau khi tải lại trang.
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>{
+      draftsRef.current=readArenaDrafts();
+      const saved=draftsRef.current[exercises[0].id];
+      if(typeof saved==="string"&&saved!==exercises[0].starter) setCode(saved);
+    },0);
+    return ()=>window.clearTimeout(timer);
+  },[]);
+
+  /** Ghi nháp của bài hiện tại; giữ nguyên nháp của các bài khác. */
+  const persistDraft=(id:string,text:string)=>{
+    draftsRef.current={...draftsRef.current,[id]:text};
+    writeJson(ARENA_DRAFTS_KEY,{version:1,drafts:draftsRef.current});
+  };
+
+  const updateCode=(text:string)=>{ setCode(text); persistDraft(exerciseId,text); };
+
   const selectExercise=(id:string)=>{
     const next=exercises.find(item=>item.id===id)!;
-    setExerciseId(id); setCode(next.starter); setResult(null); setMode("visible");
+    // Cất nháp bài đang mở trước khi rời đi, rồi nạp lại nháp của bài đích.
+    persistDraft(exerciseId,code);
+    setExerciseId(id);
+    setCode(draftsRef.current[id] ?? next.starter);
+    setResult(null); setMode("visible");
+  };
+
+  /** Xoá về starter — thao tác phá huỷ nên phải hỏi trước. */
+  const resetCode=()=>{
+    const untouched=code.trim()===exercise.starter.trim();
+    if(!untouched&&!window.confirm("Xoá toàn bộ code bạn đang viết và quay về đề gốc? Thao tác này không hoàn tác được.")) return;
+    setCode(exercise.starter); persistDraft(exerciseId,exercise.starter); setResult(null);
   };
   const tests=mode==="visible"
     ? exercise.visible.map(test=>({...test,blind:false}))
@@ -165,9 +217,9 @@ export function CodePractice() {
           <div className="solo-rule"><strong>SOLO·90</strong><p>Không nhờ AI sinh code, pseudocode hay sửa dòng cụ thể. Chỉ hỏi loại lỗi sau khi đã tự chạy test.</p></div>
         </div>
         <div className="editor-pane">
-          <div className="editor-toolbar"><div><button className={mode==="visible"?"active":""} onClick={()=>{setMode("visible");setResult(null)}} disabled={status!=="idle"}>Test công khai</button><button className={mode==="blind"?"active":""} onClick={()=>{setMode("blind");setResult(null)}} disabled={status!=="idle"}>Nộp kiểm tra mù</button></div><button className="reset-code" onClick={()=>{setCode(exercise.starter);setResult(null)}} disabled={status!=="idle"}>Khôi phục</button></div>
+          <div className="editor-toolbar"><div><button className={mode==="visible"?"active":""} onClick={()=>{setMode("visible");setResult(null)}} disabled={status!=="idle"}>Test công khai</button><button className={mode==="blind"?"active":""} onClick={()=>{setMode("blind");setResult(null)}} disabled={status!=="idle"}>Nộp kiểm tra mù</button></div><button className="reset-code" onClick={resetCode} disabled={status!=="idle"}>Khôi phục</button></div>
           <p className="hidden-note">Kiểm tra mù chỉ giấu ca kiểm tra khỏi giao diện trước khi chạy. Nội dung vẫn nằm trong mã phía client và có thể xem qua source/bundle; đây là công cụ luyện tập, không phải cơ chế bảo mật.</p>
-          <div className="code-editor"><div className="line-numbers">{lines.map(line=><span key={line}>{line}</span>)}</div><textarea spellCheck={false} value={code} onChange={e=>setCode(e.target.value)} aria-label="Trình soạn thảo mã Python" disabled={status!=="idle"}/></div>
+          <div className="code-editor"><div className="line-numbers">{lines.map(line=><span key={line}>{line}</span>)}</div><textarea spellCheck={false} value={code} onChange={e=>updateCode(e.target.value)} aria-label="Trình soạn thảo mã Python" disabled={status!=="idle"}/></div>
           <div className="runbar" aria-live="polite"><span>{status==="loading"?"Đang tải Python (~10 MB); chưa tính thời gian chạy…":status==="running"?"Đang chạy trong Web Worker…":"Python 3 · Web Worker · mã chạy tối đa 8 giây"}</span><button onClick={run} disabled={status!=="idle"}>{mode==="blind"?"Nộp bài":"Chạy test"} <b>▶</b></button></div>
           <div className={`test-result ${result?(result.ok&&passed===total?"pass":"fail"):""}`}><div className="result-heading"><strong>{!result?"KẾT QUẢ SẼ HIỆN Ở ĐÂY":result.ok?`${passed}/${total} test đạt`:"KHÔNG THỂ CHẤM"}</strong>{result&&total>0&&<span>{Math.round(passed/total*100)} điểm</span>}</div>{result?.output?.length?<pre>{result.output.join("\n")}</pre>:null}{result?.error?<p>{result.error.split("\n").slice(-3).join("\n")}</p>:null}{result?.details?.map((item,index)=><div className="test-row" key={`${item.name}-${index}`}><span>{item.passed?"✓":"×"}</span><strong>{item.blind?"Ca kiểm tra mù":item.name}</strong><small>{item.passed?"Đạt":item.category}</small></div>)}</div>
         </div>

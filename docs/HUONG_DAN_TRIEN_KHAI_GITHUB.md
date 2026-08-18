@@ -97,7 +97,7 @@ lại sửa, đừng push.
 | 1 | `npm run lint` | Quy tắc mã nguồn và React | Không in ra lỗi nào |
 | 2 | `npm exec tsc -- --noEmit` | Kiểu TypeScript | Không in ra gì |
 | 3 | `npm test` | Build rồi chạy 54 test Node | `pass 54`, `fail 0` |
-| 4 | `npm run build:pages` | Dựng bản tĩnh cho Pages | `Prepared GitHub Pages artifact for /VOAI/ (10 pages + 404)` |
+| 4 | `npm run build:pages` | Dựng bản tĩnh cho Pages | `Prepared GitHub Pages artifact for /VOAI/ (11 pages + 404)` |
 | 5 | `npm run test:pages` | Artifact tĩnh đúng hợp đồng | `pass 5`, `fail 0` |
 | 6 | `npm run test:grader` | CLI grader | `Ran 17 tests … OK` |
 | 7 | `npm run test:notebooks` | Bộ test của chính validator | `Ran 12 tests … OK` |
@@ -189,13 +189,14 @@ trắng trơ trọi. Chữ trơ trọi nghĩa là CSS bị 404 — xem mục 9.1
 
 ---
 
-## 5. Kiểm tra website đã lên: đi hết 10 trang
+## 5. Kiểm tra website đã lên: đi hết 11 trang
 
 Mở lần lượt và đối chiếu:
 
 | Đường dẫn | Phải thấy gì | Thử ngay tại chỗ |
 | --- | --- | --- |
 | `/VOAI/` | Trang chủ, tiêu đề “Đi từ dòng Python đầu tiên…” | Bấm **Bắt đầu Ngày 1** |
+| `/VOAI/huong-dan/` | Hướng dẫn sử dụng gộp 11 mục cho người học | Bấm một mục trong mục lục |
 | `/VOAI/roadmap/` | 41 tuần + khối Tổng kết, thanh tiến độ `0/290 phiên` | Mở một tuần, tích một phiên, tải lại trang — dấu tích còn nguyên |
 | `/VOAI/lessons/` | `78/78 bài`, bộ lọc theo lĩnh vực | Chọn một bài, mở tab **Toán**, làm một câu quiz |
 | `/VOAI/math/` | 5 module · 23 chủ đề · 69 bài luyện | Nhập đáp án một bài luyện rồi bấm **Đối chiếu** |

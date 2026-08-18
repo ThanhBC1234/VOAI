@@ -37,6 +37,22 @@ export function readRaw(key: string): string | null {
   }
 }
 
+/** Ghi chuỗi thô; không bao giờ ném, dùng cho giá trị không phải JSON. */
+export function writeRaw(key: string, value: string): StorageWriteStatus {
+  const storage = getStorage();
+  if (!storage) return "unavailable";
+  try {
+    storage.setItem(key, value);
+    return "ok";
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") {
+      return "quota-exceeded";
+    }
+    return "failed";
+  }
+}
+
 /**
  * Đọc và kiểm định JSON. `validate` quyết định dữ liệu có dùng được không;
  * mọi trường hợp còn lại trả `fallback` mà **không** đụng tới storage.

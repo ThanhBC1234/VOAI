@@ -1,4 +1,5 @@
 import { InternalLink } from "./InternalLink";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function SiteHeader() {
   return (
@@ -24,6 +25,7 @@ export function SiteHeader() {
       </nav>
       <div className="header-actions">
         <span className="streak" aria-label="Chế độ học tự lực">SOLO·90</span>
+        <ThemeToggle />
         <InternalLink className="profile" href="/roadmap" aria-label="Hồ sơ người học">L11</InternalLink>
       </div>
     </header>

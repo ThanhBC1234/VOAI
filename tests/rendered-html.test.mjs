@@ -255,6 +255,33 @@ test("math page renders every module, formula and drill without leaking answers"
   );
 });
 
+// Mất bài làm của người học là lỗi nặng nhất trong một web học tập. Ba đường
+// mất bài đã từng tồn tại ở Code Arena: đổi bài, bấm "Khôi phục", và tải lại
+// trang — code chỉ nằm trong React state nên biến mất không dấu vết.
+test("code arena keeps the learner's work across switching, reset and reload", async () => {
+  const source = await readFile(new URL("../components/CodePractice.tsx", import.meta.url), "utf8");
+
+  // Nháp được ghi xuống bộ nhớ trình duyệt, tách theo từng bài.
+  assert.match(source, /ARENA_DRAFTS_KEY\s*=\s*"voai-arena-drafts-v1"/);
+  assert.match(source, /const updateCode=\(text:string\)=>\{ setCode\(text\); persistDraft\(exerciseId,text\); \}/);
+  // Mỗi lần gõ đều đi qua updateCode, không set thẳng vào state.
+  assert.match(source, /onChange=\{e=>updateCode\(e\.target\.value\)\}/);
+  assert.doesNotMatch(
+    source,
+    /onChange=\{e=>setCode\(e\.target\.value\)\}/,
+    "textarea ghi thẳng vào state nên nháp không được lưu",
+  );
+  // Đổi bài phải cất nháp trước rồi mới nạp nháp của bài đích.
+  assert.match(source, /persistDraft\(exerciseId,code\);/);
+  assert.match(source, /setCode\(draftsRef\.current\[id\] \?\? next\.starter\)/);
+  // Xoá về đề gốc là thao tác phá huỷ nên phải hỏi trước.
+  assert.match(source, /const resetCode=\(\)=>\{/);
+  assert.match(source, /window\.confirm\(/);
+  assert.match(source, /onClick=\{resetCode\}/);
+  // Và khôi phục lại được sau khi tải lại trang.
+  assert.match(source, /readArenaDrafts\(\)/);
+});
+
 test("ships notebooks, local grader, worker, and social card", async () => {
   const [notebooks, packageJson, og, notebookHubSource] = await Promise.all([
     readdir(new URL("../notebooks/", import.meta.url)),

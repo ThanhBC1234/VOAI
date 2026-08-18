@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { InternalLink } from "./InternalLink";
+import { useLabPalette } from "../lib/lab-palette";
 
 type LabId = "gradient" | "knn" | "convolution" | "attention" | "audio" | "metrics";
 
@@ -35,6 +36,7 @@ function PredictionBox({ prompt }: { prompt: string }) {
 
 function GradientLab() {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const palette = useLabPalette();
   const [theta, setTheta] = useState(-3.5);
   const [learningRate, setLearningRate] = useState(0.15);
   const [history, setHistory] = useState<number[]>([-3.5]);
@@ -46,15 +48,15 @@ function GradientLab() {
     if (!context) return;
     const width = 660, height = 310, pad = 36;
     context.clearRect(0, 0, width, height);
-    context.fillStyle = "#fffdf7"; context.fillRect(0, 0, width, height);
-    context.strokeStyle = "#d9ddd4"; context.lineWidth = 1;
+    context.fillStyle = palette.surface; context.fillRect(0, 0, width, height);
+    context.strokeStyle = palette.grid; context.lineWidth = 1;
     for (let i = 0; i <= 6; i += 1) {
       const x = pad + i * ((width - pad * 2) / 6);
       context.beginPath(); context.moveTo(x, pad); context.lineTo(x, height - pad); context.stroke();
     }
     const toX = (value: number) => pad + ((value + 5) / 10) * (width - pad * 2);
     const toY = (value: number) => height - pad - (value / 52) * (height - pad * 2);
-    context.strokeStyle = "#183d36"; context.lineWidth = 3; context.beginPath();
+    context.strokeStyle = palette.curve; context.lineWidth = 3; context.beginPath();
     for (let pixel = 0; pixel <= 300; pixel += 1) {
       const value = -5 + (pixel / 300) * 10;
       const x = toX(value), y = toY(loss(value));
@@ -62,12 +64,12 @@ function GradientLab() {
     }
     context.stroke();
     history.forEach((value, index) => {
-      context.fillStyle = index === history.length - 1 ? "#ff6e50" : `rgba(127, 200, 62, ${0.25 + index / Math.max(history.length, 1) * .55})`;
+      context.fillStyle = index === history.length - 1 ? palette.pointActive : `rgba(${palette.pointTrailRgb}, ${0.25 + index / Math.max(history.length, 1) * .55})`;
       context.beginPath(); context.arc(toX(value), toY(loss(value)), index === history.length - 1 ? 7 : 4, 0, Math.PI * 2); context.fill();
     });
-    context.fillStyle = "#51655f"; context.font = "12px monospace";
+    context.fillStyle = palette.axisText; context.font = "12px monospace";
     context.fillText("θ = -5", pad, height - 11); context.fillText("θ = 5", width - pad - 38, height - 11); context.fillText("J(θ)", 8, 20);
-  }, [history, theta]);
+  }, [history, theta, palette]);
 
   const step = () => {
     const next = theta - learningRate * gradient;
@@ -98,6 +100,7 @@ const knnPoints: Point[] = [
 
 function KnnLab() {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const palette = useLabPalette();
   const [query, setQuery] = useState({ x: .52, y: .48 });
   const [k, setK] = useState(3);
   const nearest = useMemo(() => knnPoints.map((point) => ({...point, distance: Math.hypot(point.x-query.x, point.y-query.y)})).sort((a,b)=>a.distance-b.distance).slice(0,k), [query,k]);
@@ -105,13 +108,13 @@ function KnnLab() {
   const result = votesA > k / 2 ? "A" : "B";
   useEffect(() => {
     const context = canvas.current?.getContext("2d"); if (!context) return;
-    const width=660,height=310,pad=25; context.fillStyle="#fffdf7";context.fillRect(0,0,width,height);
-    context.strokeStyle="#e1e1d7"; for(let i=0;i<11;i++){const x=pad+i*(width-pad*2)/10;context.beginPath();context.moveTo(x,pad);context.lineTo(x,height-pad);context.stroke();}
+    const width=660,height=310,pad=25; context.fillStyle=palette.surface;context.fillRect(0,0,width,height);
+    context.strokeStyle=palette.grid; for(let i=0;i<11;i++){const x=pad+i*(width-pad*2)/10;context.beginPath();context.moveTo(x,pad);context.lineTo(x,height-pad);context.stroke();}
     const xy=(x:number,y:number)=>[pad+x*(width-pad*2),height-pad-y*(height-pad*2)];
-    nearest.forEach((point)=>{const [x1,y1]=xy(query.x,query.y),[x2,y2]=xy(point.x,point.y);context.strokeStyle="rgba(16,42,38,.25)";context.setLineDash([5,5]);context.beginPath();context.moveTo(x1,y1);context.lineTo(x2,y2);context.stroke();});context.setLineDash([]);
-    knnPoints.forEach((point)=>{const [x,y]=xy(point.x,point.y);context.fillStyle=point.label==="A"?"#4aa8d8":"#ff795c";context.beginPath();context.arc(x,y,9,0,Math.PI*2);context.fill();context.fillStyle="#fff";context.font="700 10px sans-serif";context.textAlign="center";context.fillText(point.label,x,y+3.5);});
-    const [qx,qy]=xy(query.x,query.y);context.strokeStyle="#102a26";context.lineWidth=3;context.beginPath();context.arc(qx,qy,13,0,Math.PI*2);context.stroke();context.fillStyle="#102a26";context.fillText("?",qx,qy+4);
-  },[query,nearest]);
+    nearest.forEach((point)=>{const [x1,y1]=xy(query.x,query.y),[x2,y2]=xy(point.x,point.y);context.strokeStyle=palette.link;context.setLineDash([5,5]);context.beginPath();context.moveTo(x1,y1);context.lineTo(x2,y2);context.stroke();});context.setLineDash([]);
+    knnPoints.forEach((point)=>{const [x,y]=xy(point.x,point.y);context.fillStyle=point.label==="A"?palette.classA:palette.classB;context.beginPath();context.arc(x,y,9,0,Math.PI*2);context.fill();context.fillStyle=palette.onPoint;context.font="700 10px sans-serif";context.textAlign="center";context.fillText(point.label,x,y+3.5);});
+    const [qx,qy]=xy(query.x,query.y);context.strokeStyle=palette.query;context.lineWidth=3;context.beginPath();context.arc(qx,qy,13,0,Math.PI*2);context.stroke();context.fillStyle=palette.query;context.fillText("?",qx,qy+4);
+  },[query,nearest,palette]);
   const moveQuery = (event: React.PointerEvent<HTMLCanvasElement>) => { const rect=event.currentTarget.getBoundingClientRect();setQuery({x:Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width)),y:Math.max(0,Math.min(1,1-(event.clientY-rect.top)/rect.height))}); };
   return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·KNN</p><h2>Hàng xóm bỏ phiếu</h2><p>k-NN không “học” tham số. Nó lưu dữ liệu và phân loại điểm mới theo nhãn chiếm đa số trong <em>k</em> điểm gần nhất.</p><label>Số hàng xóm k <strong>{k}</strong><input type="range" min="1" max="9" step="2" value={k} onChange={(e)=>setK(Number(e.target.value))}/></label><div className="lab-stats"><div><span>Phiếu A</span><strong>{votesA}</strong></div><div><span>Phiếu B</span><strong>{k-votesA}</strong></div><div><span>Dự đoán</span><strong className={result==="A"?"blue":"coral"}>{result}</strong></div></div><p className="lab-note">Thử đặt điểm hỏi gần biên và tăng k. Khi nào lớp dự đoán đổi?</p></div><div className="lab-stage"><PredictionBox prompt="Nếu tăng k, quyết định ở biên sẽ ổn định hơn hay nhạy hơn với nhiễu cục bộ?"/><canvas ref={canvas} width="660" height="310" onPointerDown={moveQuery} aria-label={`Mặt phẳng dữ liệu k-NN. Điểm cần phân loại đang ở x ${query.x.toFixed(2)}, y ${query.y.toFixed(2)}; dự đoán hiện tại là lớp ${result}. Nhấn để di chuyển, hoặc dùng ô nhập toạ độ bên dưới.`}/><small>Nhấn vào biểu đồ để di chuyển điểm “?”.</small>
     {/* A11Y-P2-01: canvas không nhập được bằng bàn phím, nên có form toạ độ tương đương. */}
@@ -130,20 +133,22 @@ const kernels = {
 };
 
 function ConvolutionLab() {
+  const palette = useLabPalette();
   const [image, setImage] = useState(() => Array.from({length:5},(_,row)=>Array.from({length:5},(_,col)=>(row===2||col===2)?1:0)));
   const [kernelName,setKernelName]=useState<keyof typeof kernels>("Dò cạnh"); const kernel=kernels[kernelName];
   const output=useMemo(()=>Array.from({length:3},(_,row)=>Array.from({length:3},(_,col)=>kernel.reduce((sum,line,kr)=>sum+line.reduce((inside,value,kc)=>inside+value*image[row+kr][col+kc],0),0))),[image,kernel]);
   const toggle=(row:number,col:number)=>setImage(current=>current.map((line,r)=>line.map((value,c)=>r===row&&c===col?(value?0:1):value)));
-  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·CNN</p><h2>Một kernel, nhiều đặc trưng</h2><p>Convolution trượt một ma trận nhỏ trên ảnh. Mỗi ô đầu ra là tổng tích từng phần tử giữa vùng ảnh và kernel.</p><select aria-label="Chọn kernel convolution" value={kernelName} onChange={(e)=>setKernelName(e.target.value as keyof typeof kernels)}>{Object.keys(kernels).map(name=><option key={name}>{name}</option>)}</select><div className="kernel-grid">{kernel.flat().map((v,i)=><span key={i}>{Number.isInteger(v)?v:v.toFixed(2)}</span>)}</div><div className="formula">Y[i,j] = Σₘ Σₙ X[i+m,j+n]K[m,n]</div></div><div className="lab-stage"><PredictionBox prompt="Với kernel hiện tại, vùng phẳng hay vùng thay đổi sáng–tối sẽ cho trị tuyệt đối lớn hơn?"/><div className="matrix-pair"><div><strong>Ảnh 5×5 — nhấn để đổi pixel</strong><div className="pixel-grid">{image.flatMap((line,row)=>line.map((v,col)=><button key={`${row}-${col}`} className={v?"on":""} onClick={()=>toggle(row,col)} aria-label={`Pixel hàng ${row+1} cột ${col+1}: ${v}`}>{v}</button>))}</div></div><span className="matrix-arrow">∗ →</span><div><strong>Feature map 3×3</strong><div className="output-grid">{output.flat().map((v,i)=><span key={i} style={{background:`rgba(183,243,107,${Math.min(1,Math.abs(v)/4+.08)})`}}>{v.toFixed(1)}</span>)}</div></div></div></div></section>;
+  return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·CNN</p><h2>Một kernel, nhiều đặc trưng</h2><p>Convolution trượt một ma trận nhỏ trên ảnh. Mỗi ô đầu ra là tổng tích từng phần tử giữa vùng ảnh và kernel.</p><select aria-label="Chọn kernel convolution" value={kernelName} onChange={(e)=>setKernelName(e.target.value as keyof typeof kernels)}>{Object.keys(kernels).map(name=><option key={name}>{name}</option>)}</select><div className="kernel-grid">{kernel.flat().map((v,i)=><span key={i}>{Number.isInteger(v)?v:v.toFixed(2)}</span>)}</div><div className="formula">Y[i,j] = Σₘ Σₙ X[i+m,j+n]K[m,n]</div></div><div className="lab-stage"><PredictionBox prompt="Với kernel hiện tại, vùng phẳng hay vùng thay đổi sáng–tối sẽ cho trị tuyệt đối lớn hơn?"/><div className="matrix-pair"><div><strong>Ảnh 5×5 — nhấn để đổi pixel</strong><div className="pixel-grid">{image.flatMap((line,row)=>line.map((v,col)=><button key={`${row}-${col}`} className={v?"on":""} onClick={()=>toggle(row,col)} aria-label={`Pixel hàng ${row+1} cột ${col+1}: ${v}`}>{v}</button>))}</div></div><span className="matrix-arrow">∗ →</span><div><strong>Feature map 3×3</strong><div className="output-grid">{output.flat().map((v,i)=>{const weight=Math.min(1,Math.abs(v)/4+.08);return <span key={i} style={{background:`rgba(${palette.convRgb},${weight})`,color:weight>.5?palette.convTextHigh:palette.convTextLow}}>{v.toFixed(1)}</span>;})}</div></div></div></div></section>;
 }
 
 const tokenNames=["AI","học","từ","dữ liệu"];
 const tokenVectors=[[1,.2,.1],[.7,.5,.2],[.1,.8,.3],[.3,.5,1]];
 function softmax(values:number[]){const max=Math.max(...values);const exps=values.map(v=>Math.exp(v-max));const total=exps.reduce((a,b)=>a+b,0);return exps.map(v=>v/total);}
-function AttentionLab(){const [temperature,setTemperature]=useState(1);const matrix=useMemo(()=>tokenVectors.map(q=>softmax(tokenVectors.map(k=>q.reduce((sum,value,index)=>sum+value*k[index],0)/Math.sqrt(3)/temperature))),[temperature]);return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·ATT</p><h2>Mỗi token nhìn vào đâu?</h2><p>Attention biến độ tương đồng query–key thành phân phối trọng số. Nhiệt độ thấp làm phân phối “sắc” hơn; nhiệt độ cao dàn đều sự chú ý.</p><label>Nhiệt độ τ <strong>{temperature.toFixed(2)}</strong><input type="range" min="0.2" max="2.5" step="0.05" value={temperature} onChange={e=>setTemperature(Number(e.target.value))}/></label><div className="formula">Attention(Q,K,V) = softmax(QKᵀ / √d) V</div></div><div className="lab-stage"><PredictionBox prompt="Giảm nhiệt độ sẽ làm entropy của mỗi hàng attention tăng hay giảm?"/><div className="attention-wrap"><div className="attention-grid" style={{gridTemplateColumns:`90px repeat(${tokenNames.length}, 1fr)`}}><span></span>{tokenNames.map(t=><strong key={`h-${t}`}>{t}</strong>)}{matrix.flatMap((row,r)=>[<strong key={`r-${r}`}>{tokenNames[r]}</strong>,...row.map((value,c)=><span key={`${r}-${c}`} style={{background:`rgba(48,123,89,${.08+value*.92})`,color:value>.48?"white":"#102a26"}}>{value.toFixed(2)}</span>)])}</div><small>Mỗi hàng có tổng bằng 1. Hàng là query, cột là key.</small></div></div></section>}
+function AttentionLab(){const palette=useLabPalette();const [temperature,setTemperature]=useState(1);const matrix=useMemo(()=>tokenVectors.map(q=>softmax(tokenVectors.map(k=>q.reduce((sum,value,index)=>sum+value*k[index],0)/Math.sqrt(3)/temperature))),[temperature]);return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·ATT</p><h2>Mỗi token nhìn vào đâu?</h2><p>Attention biến độ tương đồng query–key thành phân phối trọng số. Nhiệt độ thấp làm phân phối “sắc” hơn; nhiệt độ cao dàn đều sự chú ý.</p><label>Nhiệt độ τ <strong>{temperature.toFixed(2)}</strong><input type="range" min="0.2" max="2.5" step="0.05" value={temperature} onChange={e=>setTemperature(Number(e.target.value))}/></label><div className="formula">Attention(Q,K,V) = softmax(QKᵀ / √d) V</div></div><div className="lab-stage"><PredictionBox prompt="Giảm nhiệt độ sẽ làm entropy của mỗi hàng attention tăng hay giảm?"/><div className="attention-wrap"><div className="attention-grid" style={{gridTemplateColumns:`90px repeat(${tokenNames.length}, 1fr)`}}><span></span>{tokenNames.map(t=><strong key={`h-${t}`}>{t}</strong>)}{matrix.flatMap((row,r)=>[<strong key={`r-${r}`}>{tokenNames[r]}</strong>,...row.map((value,c)=><span key={`${r}-${c}`} style={{background:`rgba(${palette.heatRgb},${.08+value*.92})`,color:value>.48?palette.heatTextHigh:palette.heatTextLow}}>{value.toFixed(2)}</span>)])}</div><small>Mỗi hàng có tổng bằng 1. Hàng là query, cột là key.</small></div></div></section>}
 
 function AudioLab(){
   const canvas=useRef<HTMLCanvasElement>(null);
+  const palette = useLabPalette();
   const [frequency,setFrequency]=useState(6);
   const [noise,setNoise]=useState(0);
   useEffect(()=>{
@@ -163,12 +168,12 @@ function AudioLab(){
       return Math.hypot(real,imaginary)*(edgeBin?1:2)/sampleCount;
     });
 
-    context.fillStyle="#fffdf7";context.fillRect(0,0,w,h);
-    context.strokeStyle="#d6dbd2";context.lineWidth=1;context.beginPath();
+    context.fillStyle=palette.surface;context.fillRect(0,0,w,h);
+    context.strokeStyle=palette.grid;context.lineWidth=1;context.beginPath();
     context.moveTo(left,waveformMid);context.lineTo(w-right,waveformMid);
     context.moveTo(left,spectrumBase);context.lineTo(w-right,spectrumBase);context.stroke();
 
-    context.strokeStyle="#ff795c";context.lineWidth=2;context.beginPath();
+    context.strokeStyle=palette.wave;context.lineWidth=2;context.beginPath();
     samples.forEach((value,index)=>{
       const x=left+index/(sampleCount-1)*(w-left-right);
       const y=waveformMid-value*waveformScale;
@@ -179,20 +184,20 @@ function AudioLab(){
     const slotWidth=(w-left-right)/oneSidedBins;
     magnitudes.forEach((magnitude,bin)=>{
       const barHeight=Math.min(magnitude/2,1)*spectrumHeight;
-      context.fillStyle=bin*sampleRate/sampleCount===17?"#ff795c":"#307b59";
+      context.fillStyle=bin*sampleRate/sampleCount===17?palette.barHighlight:palette.bar;
       context.fillRect(left+bin*slotWidth+0.5,spectrumBase-barHeight,Math.max(1,slotWidth-1),barHeight);
     });
 
-    context.fillStyle="#536760";context.font="11px monospace";context.textAlign="left";
+    context.fillStyle=palette.axisText;context.font="11px monospace";context.textAlign="left";
     context.fillText("WAVEFORM · BIÊN ĐỘ TƯƠNG ĐỐI",left,18);
     context.fillText(`0 s`,left,157);context.textAlign="right";context.fillText(`${duration.toFixed(1)} s`,w-right,157);
     context.textAlign="left";context.fillText("PHỔ BIÊN ĐỘ MỘT PHÍA (DFT)",left,181);
     [0,8,16,24,32].forEach((hz)=>{
       const x=left+(hz/(sampleRate/2))*(w-left-right);
-      context.strokeStyle="#aeb9b1";context.beginPath();context.moveTo(x,spectrumBase);context.lineTo(x,spectrumBase+4);context.stroke();
+      context.strokeStyle=palette.tick;context.beginPath();context.moveTo(x,spectrumBase);context.lineTo(x,spectrumBase+4);context.stroke();
       context.textAlign=hz===0?"left":hz===32?"right":"center";context.fillText(`${hz} Hz`,x,309);
     });
-  },[frequency,noise]);
+  },[frequency,noise,palette]);
   return <section className="lab-panel"><div className="lab-explainer"><p className="lab-code">LAB·AUD</p><h2>Từ dao động đến tần số</h2><p>DFT hỏi: “Tín hiệu này chứa bao nhiêu của mỗi sóng sin/cos?” Đỉnh phổ xuất hiện tại tần số tạo nên waveform.</p><label>Tần số chính <strong>{frequency} Hz</strong><input type="range" min="1" max="20" step="1" value={frequency} onChange={e=>setFrequency(Number(e.target.value))}/></label><label>Biên độ nhiễu 17 Hz <strong>{noise.toFixed(1)}</strong><input type="range" min="0" max="1" step="0.1" value={noise} onChange={e=>setNoise(Number(e.target.value))}/></label><div className="formula">X[k] = Σₙ x[n]e<sup>−j2πkn/N</sup></div></div><div className="lab-stage"><PredictionBox prompt="Khi thêm nhiễu 17 Hz, phổ sẽ xuất hiện thêm đỉnh ở đâu?"/><canvas ref={canvas} width="660" height="330" aria-label="Waveform lấy mẫu ở 64 mẫu mỗi giây và phổ DFT một phía từ 0 đến 32 Hz"/><small>128 mẫu · 64 mẫu/giây · 2,0 giây · độ phân giải phổ 0,5 Hz</small></div></section>
 }
 

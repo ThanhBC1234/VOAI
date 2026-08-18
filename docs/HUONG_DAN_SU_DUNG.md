@@ -79,6 +79,10 @@ VOAI Lab là bộ học liệu **tự học AI** cho học sinh THPT đã biết
 | Notebook | 8 notebook mở trên Colab | Bài thực hành dài |
 | Tài nguyên | Nguồn học hợp pháp đã kiểm | Khi muốn học thêm |
 
+> ℹ️ **Nền sáng hay nền tối tuỳ bạn**
+>
+> Nút đổi nền nằm ở góc phải thanh điều hướng. Lựa chọn được nhớ lại cho những lần sau, và mặc định đi theo cài đặt sáng/tối của máy bạn.
+
 ---
 
 <a id="mot-phien-hoc"></a>
@@ -198,9 +202,18 @@ Kết thúc bằng một câu tự hỏi: **“Đổi input hay ràng buộc nà
 
 *Đọc kỹ mục này, nếu không bạn sẽ mất tiến độ mà không hiểu vì sao.*
 
-Toàn bộ tiến độ (phiên đã tích, bản nháp, lịch sử tự chấm, chủ đề Toán đã nắm, bài thi thử) lưu **ngay trong trình duyệt của bạn**, không có tài khoản và không đồng bộ lên máy chủ.
+Toàn bộ tiến độ lưu **ngay trong trình duyệt của bạn**, không có tài khoản và không đồng bộ lên máy chủ. Những thứ sau được **tự động lưu**, không cần bấm nút nào:
 
-- Đổi máy hoặc đổi trình duyệt = **không thấy tiến độ cũ**.
+- Phiên đã tích hoàn thành ở Lộ trình.
+- **Bản nháp phiếu đánh giá** — đổi phiên hay tải lại trang đều không mất.
+- **Code bạn viết trong Code Arena** — lưu riêng cho từng bài, còn nguyên sau khi tải lại trang.
+- Lịch sử tự chấm, chủ đề Toán đã đánh dấu, và bài thi thử đang làm dở (giữ cả đồng hồ).
+
+> ℹ️ **Lỡ tay thì sao?**
+>
+> Các thao tác xoá đều **hỏi lại trước khi thực hiện**: nút “Khôi phục” trong Code Arena và việc rời khỏi bài thi thử đang chạy. Bấm nhầm rồi chọn Huỷ thì bài làm vẫn còn nguyên.
+
+- Đổi máy hoặc đổi trình duyệt = **không thấy tiến độ cũ** (dữ liệu không theo bạn sang máy khác).
 - Dùng chế độ ẩn danh = mất hết khi đóng cửa sổ.
 - Xóa dữ liệu duyệt web = mất tiến độ.
 

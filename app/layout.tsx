@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Be_Vietnam_Pro, Geist_Mono } from "next/font/google";
 import { SiteHeader } from "../components/SiteHeader";
 import { sitePath } from "../lib/site-path";
+import { THEME_INIT_SCRIPT } from "../lib/theme";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
@@ -53,7 +54,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="vi">
+    <html lang="vi" suppressHydrationWarning>
+      <head>
+        {/* Đặt `data-theme` trước khi trang được vẽ; xem `lib/theme.ts`. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <SiteHeader />
         {children}

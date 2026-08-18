@@ -116,6 +116,14 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
           ["Tài nguyên", "Nguồn học hợp pháp đã kiểm", "Khi muốn học thêm"],
         ],
       },
+      {
+        kind: "note",
+        tone: "info",
+        title: "Nền sáng hay nền tối tuỳ bạn",
+        value:
+          "Nút đổi nền nằm ở góc phải thanh điều hướng. Lựa chọn được nhớ lại cho những lần sau, " +
+          "và mặc định đi theo cài đặt sáng/tối của máy bạn.",
+      },
     ],
   },
   {
@@ -289,13 +297,30 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
       {
         kind: "text",
         value:
-          "Toàn bộ tiến độ (phiên đã tích, bản nháp, lịch sử tự chấm, chủ đề Toán đã nắm, bài thi thử) " +
-          "lưu **ngay trong trình duyệt của bạn**, không có tài khoản và không đồng bộ lên máy chủ.",
+          "Toàn bộ tiến độ lưu **ngay trong trình duyệt của bạn**, không có tài khoản và không đồng bộ lên máy chủ. " +
+          "Những thứ sau được **tự động lưu**, không cần bấm nút nào:",
       },
       {
         kind: "list",
         items: [
-          "Đổi máy hoặc đổi trình duyệt = **không thấy tiến độ cũ**.",
+          "Phiên đã tích hoàn thành ở Lộ trình.",
+          "**Bản nháp phiếu đánh giá** — đổi phiên hay tải lại trang đều không mất.",
+          "**Code bạn viết trong Code Arena** — lưu riêng cho từng bài, còn nguyên sau khi tải lại trang.",
+          "Lịch sử tự chấm, chủ đề Toán đã đánh dấu, và bài thi thử đang làm dở (giữ cả đồng hồ).",
+        ],
+      },
+      {
+        kind: "note",
+        tone: "info",
+        title: "Lỡ tay thì sao?",
+        value:
+          "Các thao tác xoá đều **hỏi lại trước khi thực hiện**: nút “Khôi phục” trong Code Arena và việc rời khỏi " +
+          "bài thi thử đang chạy. Bấm nhầm rồi chọn Huỷ thì bài làm vẫn còn nguyên.",
+      },
+      {
+        kind: "list",
+        items: [
+          "Đổi máy hoặc đổi trình duyệt = **không thấy tiến độ cũ** (dữ liệu không theo bạn sang máy khác).",
           "Dùng chế độ ẩn danh = mất hết khi đóng cửa sổ.",
           "Xóa dữ liệu duyệt web = mất tiến độ.",
         ],
