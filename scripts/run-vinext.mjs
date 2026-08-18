@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { emitAssessmentChunks } from "./emit-assessment-chunks.mjs";
+import { emitCoachIndex } from "./emit-coach-index.mjs";
 import { BASE_PATH } from "../site.config.mjs";
 
 const requestedMode = process.argv[2];
@@ -19,6 +20,14 @@ console.log(
   `[voai] ${chunkResult.chunks} chunk assessment · ${(chunkResult.bytes / 1024).toFixed(1)} KB raw`,
 );
 
+// Cùng lý do: chỉ mục trợ giảng cũng là tài sản sinh ra từ nội dung, nên phải
+// được sinh lại ở mọi chế độ. Thiếu nó thì trợ giảng im lặng trả lời "không có
+// trong giáo trình" cho mọi câu hỏi.
+const coachResult = await emitCoachIndex();
+console.log(
+  `[voai] ${coachResult.records} bản ghi trợ giảng · ${(coachResult.bytes / 1024).toFixed(1)} KB raw`,
+);
+
 const executable = process.execPath;
 const cli = path.join("node_modules", "vinext", "dist", "cli.js");
 const cliArguments = [cli, mode];
@@ -28,7 +37,17 @@ if (requestedMode === "pages") {
   if (path.dirname(pagesOutput) !== workspaceRoot) {
     throw new Error(`Refusing to clean unexpected Pages output: ${pagesOutput}`);
   }
-  fs.rmSync(pagesOutput, { recursive: true, force: true });
+  if (fs.existsSync(pagesOutput)) {
+    // Windows chỉ *đánh dấu* thư mục để xoá và gỡ thật khi handle cuối cùng
+    // đóng lại. Nếu vinext kịp tạo lại `dist` trong khoảng đó, thao tác xoá còn
+    // treo sẽ cuốn luôn output vừa ghi: cả 5 giai đoạn build báo thành công rồi
+    // bước prerender chết với "No build output found in …/dist". Đổi tên là
+    // thao tác nguyên tử và trả lại ngay đường dẫn `dist`, nên lượt build sau
+    // ghi vào thư mục sạch, không dính tới thư mục đang chờ xoá.
+    const staleOutput = path.resolve(`dist.stale-${process.pid}-${Date.now()}`);
+    fs.renameSync(pagesOutput, staleOutput);
+    fs.rmSync(staleOutput, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  }
   cliArguments.push("--prerender-concurrency", "1");
 }
 

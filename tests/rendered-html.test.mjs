@@ -258,24 +258,59 @@ test("math page renders every module, formula and drill without leaking answers"
 // Mất bài làm của người học là lỗi nặng nhất trong một web học tập. Ba đường
 // mất bài đã từng tồn tại ở Code Arena: đổi bài, bấm "Khôi phục", và tải lại
 // trang — code chỉ nằm trong React state nên biến mất không dấu vết.
+test("every screen that holds learner work routes writes through the safe layer", async () => {
+  // Ràng buộc ở đây là **kiến trúc**, không phải cách viết: nhịp ghi và việc báo
+  // lỗi ghi đã có test hành vi riêng ở `tests/draft-storage.test.mjs`. Test này
+  // chỉ chốt rằng không màn hình nào lặng lẽ quay về `localStorage` thô — đó là
+  // cách cả ba lỗi mất bài trước đây lọt vào.
+  const [arena, assessments, theory] = await Promise.all([
+    readFile(new URL("../components/CodePractice.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/AssessmentExplorer.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/TheoryExam.tsx", import.meta.url), "utf8"),
+  ]);
+
+  for (const [name, source] of [
+    ["CodePractice", arena],
+    ["AssessmentExplorer", assessments],
+    ["TheoryExam", theory],
+  ]) {
+    assert.doesNotMatch(
+      source,
+      /localStorage *[.] *(get|set|remove)Item/,
+      `${name} gọi thẳng localStorage; phải đi qua lib/local-storage.ts để không ném và không nuốt lỗi`,
+    );
+  }
+
+  // Hai màn hình có ô gõ tự do phải gộp nhịp ghi thay vì ghi từng ký tự.
+  for (const [name, source] of [["CodePractice", arena], ["AssessmentExplorer", assessments]]) {
+    assert.match(source, /useDraftWriter/, `${name} phải dùng useDraftWriter cho bản nháp`);
+  }
+
+  // Lịch sử thi phải đi qua cửa kiểm định, nếu không một bản ghi hỏng là trắng trang.
+  assert.match(theory, /parseStoredAttempt/);
+  assert.doesNotMatch(
+    theory,
+    /as\s+StoredAttempt\[\]/,
+    "ép kiểu thẳng mảng đọc từ storage là đúng lỗi đã gây trắng trang",
+  );
+});
+
 test("code arena keeps the learner's work across switching, reset and reload", async () => {
   const source = await readFile(new URL("../components/CodePractice.tsx", import.meta.url), "utf8");
 
   // Nháp được ghi xuống bộ nhớ trình duyệt, tách theo từng bài.
   assert.match(source, /ARENA_DRAFTS_KEY\s*=\s*"voai-arena-drafts-v1"/);
-  assert.match(source, /const updateCode=\(text:string\)=>\{ setCode\(text\); persistDraft\(exerciseId,text\); \}/);
   // Mỗi lần gõ đều đi qua updateCode, không set thẳng vào state.
-  assert.match(source, /onChange=\{e=>updateCode\(e\.target\.value\)\}/);
+  assert.match(source, /onChange=\{\s*e\s*=>\s*updateCode\(/);
   assert.doesNotMatch(
     source,
-    /onChange=\{e=>setCode\(e\.target\.value\)\}/,
+    /onChange=\{\s*e\s*=>\s*setCode\(/,
     "textarea ghi thẳng vào state nên nháp không được lưu",
   );
   // Đổi bài phải cất nháp trước rồi mới nạp nháp của bài đích.
-  assert.match(source, /persistDraft\(exerciseId,code\);/);
-  assert.match(source, /setCode\(draftsRef\.current\[id\] \?\? next\.starter\)/);
+  assert.match(source, /persistDraft\(\s*exerciseId\s*,\s*code\s*,/);
+  assert.match(source, /draftsRef\.current\[id\]\s*\?\?\s*next\.starter/);
   // Xoá về đề gốc là thao tác phá huỷ nên phải hỏi trước.
-  assert.match(source, /const resetCode=\(\)=>\{/);
   assert.match(source, /window\.confirm\(/);
   assert.match(source, /onClick=\{resetCode\}/);
   // Và khôi phục lại được sau khi tải lại trang.
@@ -397,7 +432,9 @@ test("theory exam isolates practice state, gates the verdict, and persists attem
   assert.match(source, /data-theory-verdict=/);
 
   // P1-03: attempt đang làm dở được ghi và khôi phục theo schema có version.
-  assert.match(source, /parseActiveAttempt\(raw\)/);
+  // Kiểm là attempt đọc lên *đi qua cửa kiểm định*, không ràng buộc tên biến —
+  // ràng buộc tên biến chỉ làm test đỏ khi đổi cách viết mà hành vi không đổi.
+  assert.match(source, /parseActiveAttempt\(/);
   assert.match(source, /createActiveAttempt\(/);
   assert.match(source, /activeAttemptIsUsable\(restored, knownIds\)/);
 });

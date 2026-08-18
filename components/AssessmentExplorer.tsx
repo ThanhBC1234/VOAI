@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EssayCoach } from "./EssayCoach";
 import { describeWriteStatus, readJson, writeJson } from "../lib/local-storage";
+import { useDraftWriter } from "../lib/draft-storage";
 import { loadAssessmentChunk, type AssessmentDetailMap } from "../lib/assessment-details";
 import type {
   AssessmentCatalogEntry,
@@ -292,6 +294,17 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
   const [retryToken, setRetryToken] = useState(0);
   /** Kho bản nháp theo sessionId; tồn tại qua cả việc chuyển bài lẫn reload. */
   const draftsRef = useRef<Record<string, AssessmentDraft>>({});
+  const {
+    schedule: scheduleDraftWrite,
+    flush: flushDraftWrite,
+    notice: draftNotice,
+  } = useDraftWriter(DRAFTS_STORAGE_KEY);
+  /**
+   * Chặn ghi trước khi đọc xong. Lần render đầu `draft` mới chỉ là biểu mẫu
+   * rỗng; nếu bộ theo dõi bên dưới ghi ngay giá trị đó thì nó sẽ **đè mất** bản
+   * nháp đang nằm trong storage trước khi kịp khôi phục.
+   */
+  const hydratedRef = useRef(false);
   /** Attempt cũ chưa diễn giải được bằng rubric hiện tại; luôn được ghi lại kèm. */
   const unreadableRef = useRef<unknown[]>([]);
   /** Chunk đã ghép vào `details`; chặn cả tải trùng lẫn vòng lặp effect. */
@@ -320,6 +333,7 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
         {},
       );
       draftsRef.current = stored;
+      hydratedRef.current = true;
       const target = requestedAssessment ?? initialAssessment;
       if (!target) return;
       setSelectedId(target.sessionId);
@@ -327,6 +341,20 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [catalog, initialAssessment]);
+
+  /**
+   * Lưu bản nháp **trong lúc gõ** (ASSESS-P1-01).
+   *
+   * Trước đây kho nháp chỉ được ghi lúc đổi bài, nên gõ xong rồi tải lại trang
+   * hay đóng tab là mất sạch phần tự đánh giá. Theo dõi thẳng `draft` ở đây
+   * phủ được **mọi** đường sửa — kể cả những ô nhập thêm về sau — thay vì phải
+   * nhớ gọi thủ công trong từng hàm `update*`.
+   */
+  useEffect(() => {
+    if (!hydratedRef.current || !selectedId) return;
+    draftsRef.current = { ...draftsRef.current, [selectedId]: draft };
+    scheduleDraftWrite({ version: 1, drafts: draftsRef.current });
+  }, [draft, selectedId, scheduleDraftWrite]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -450,7 +478,8 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
    */
   function chooseAssessment(entry: AssessmentCatalogEntry) {
     draftsRef.current = { ...draftsRef.current, [selectedId]: draft };
-    writeJson(DRAFTS_STORAGE_KEY, { version: 1, drafts: draftsRef.current });
+    scheduleDraftWrite({ version: 1, drafts: draftsRef.current });
+    flushDraftWrite();
     setSelectedId(entry.sessionId);
     setDraft(draftsRef.current[entry.sessionId] ?? emptyDraft(entry));
     setSaveMessage("");
@@ -520,7 +549,10 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
       const remaining = { ...draftsRef.current };
       delete remaining[selected.sessionId];
       draftsRef.current = remaining;
-      writeJson(DRAFTS_STORAGE_KEY, { version: 1, drafts: remaining });
+      // Đi qua cùng một ô chờ với lúc gõ: nếu ghi thẳng ở đây, một lần ghi đã
+      // hẹn giờ từ trước còn treo sẽ chạy sau và **làm sống lại** bản nháp vừa xoá.
+      scheduleDraftWrite({ version: 1, drafts: remaining });
+      flushDraftWrite();
     } else {
       setSaveMessage(
         describeWriteStatus(status) ?? "Không thể ghi attempt vào bộ nhớ trình duyệt này.",
@@ -734,6 +766,7 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                       </label>
                     ))}
                   </div>
+                  <EssayCoach retrievalAnswers={draft.retrievalAnswers} />
                 </section>
 
                 <section>
@@ -904,6 +937,11 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                     </div>
                     <button type="submit">Lưu attempt trên thiết bị</button>
                   </div>
+                  {draftNotice && (
+                    <p className="storage-notice" role="status">
+                      {draftNotice} Bản nháp đang gõ có thể mất khi bạn rời trang.
+                    </p>
+                  )}
                   {saveMessage && (
                     <p className="save-message" role="status">
                       {saveMessage}

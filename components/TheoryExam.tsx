@@ -20,9 +20,12 @@ import {
   evaluateGates,
   formatClock,
   parseActiveAttempt,
+  parseStoredAttempt,
   secondsLeftUntil,
   type ActiveAttempt,
+  type StoredAttempt,
 } from "../lib/theory-exam-state";
+import { readJson, readRaw, removeKey, writeJson } from "../lib/local-storage";
 
 const STORAGE_KEY = "voai-theory-attempts-v1";
 
@@ -31,16 +34,6 @@ type Props = {
   questions: readonly TheoryQuestion[];
   sectionOf: Readonly<Record<string, PaperSection>>;
   paperIds: readonly string[];
-};
-
-type StoredAttempt = {
-  seed: number;
-  finishedAt: string;
-  scorePercent: number;
-  correct: number;
-  total: number;
-  bySection: Record<string, { correct: number; total: number }>;
-  byDifficulty: Record<string, { correct: number; total: number }>;
 };
 
 /* ---------------- chấm điểm ---------------- */
@@ -407,6 +400,10 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
   const [attempts, setAttempts] = useState<StoredAttempt[]>([]);
   const examResponsesRef = useRef<Record<string, Response>>({});
   const submittingRef = useRef(false);
+  /** Bản ghi lịch sử chưa diễn giải được; luôn được ghi lại kèm, không vứt đi. */
+  const unreadableRef = useRef<unknown[]>([]);
+  /** Bản sao của `attempts` để `submitExam` ghi storage mà không cần phụ thuộc state. */
+  const attemptsRef = useRef<StoredAttempt[]>([]);
 
   const byId = useMemo(() => new Map(questions.map((q) => [q.id, q])), [questions]);
   const knownIds = useMemo(() => new Set(questions.map((q) => q.id)), [questions]);
@@ -416,31 +413,33 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
     return ids.map((id) => byId.get(id)).filter((q): q is TheoryQuestion => Boolean(q));
   }, [attempt, paperIds, byId]);
 
+  // Đi qua `lib/local-storage.ts` như mọi màn hình khác: các hàm ở đó không bao
+  // giờ ném, kể cả khi storage bị chặn hoặc đầy.
   const persistAttempt = useCallback((next: ActiveAttempt | null) => {
-    try {
-      if (next) localStorage.setItem(ACTIVE_ATTEMPT_STORAGE_KEY, JSON.stringify(next));
-      else localStorage.removeItem(ACTIVE_ATTEMPT_STORAGE_KEY);
-    } catch {
-      /* storage bị chặn hoặc đầy: attempt vẫn chạy tiếp trong phiên này. */
-    }
+    if (next) writeJson(ACTIVE_ATTEMPT_STORAGE_KEY, next);
+    else removeKey(ACTIVE_ATTEMPT_STORAGE_KEY);
   }, []);
 
   // Khôi phục lịch sử và attempt đang làm dở (THEORY-P1-03).
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      try {
-        const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
-        if (Array.isArray(parsed)) setAttempts(parsed as StoredAttempt[]);
-      } catch {
-        setAttempts([]);
+      const candidates = readJson<unknown[]>(
+        STORAGE_KEY,
+        (value) => (Array.isArray(value) ? value : null),
+        [],
+      );
+      const readable: StoredAttempt[] = [];
+      const unreadable: unknown[] = [];
+      for (const candidate of candidates) {
+        const attempt = parseStoredAttempt(candidate);
+        if (attempt) readable.push(attempt);
+        else unreadable.push(candidate);
       }
-      let raw: string | null = null;
-      try {
-        raw = localStorage.getItem(ACTIVE_ATTEMPT_STORAGE_KEY);
-      } catch {
-        raw = null;
-      }
-      const restored = parseActiveAttempt(raw);
+      unreadableRef.current = unreadable;
+      attemptsRef.current = readable;
+      setAttempts(readable);
+
+      const restored = parseActiveAttempt(readRaw(ACTIVE_ATTEMPT_STORAGE_KEY));
       if (restored && !restored.submitted && activeAttemptIsUsable(restored, knownIds)) {
         setAttempt(restored);
         const responses = restored.responses as Record<string, Response>;
@@ -532,15 +531,13 @@ export function TheoryExam({ questions, sectionOf, paperIds }: Props) {
       bySection,
       byDifficulty,
     };
-    setAttempts((current) => {
-      const next = [finished, ...current].slice(0, 20);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      } catch {
-        /* localStorage đầy hoặc bị chặn: kết quả vẫn hiển thị trong phiên này. */
-      }
-      return next;
-    });
+    // Ghi **ngoài** hàm cập nhật state: React được phép gọi hàm đó nhiều lần cho
+    // cùng một lần cập nhật, nên để tác dụng phụ bên trong là ghi thừa.
+    const next = [finished, ...attemptsRef.current].slice(0, 20);
+    attemptsRef.current = next;
+    setAttempts(next);
+    // Kèm cả bản ghi chưa đọc được, để một lần nộp bài không xoá mất lịch sử.
+    writeJson(STORAGE_KEY, [...next, ...unreadableRef.current]);
   }, [paper, sectionOf, persistAttempt]);
 
   const submitExamRef = useRef(submitExam);

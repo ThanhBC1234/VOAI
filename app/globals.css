@@ -665,3 +665,33 @@ button, input, select, textarea, .primary-button, .lesson-button,
   :root:not([data-theme="light"]) .theme-toggle .theme-icon-sun { display:block; }
   :root:not([data-theme="light"]) .theme-toggle .theme-icon-moon { display:none; }
 }
+
+/* ——— Trợ giảng tra cứu ở phiếu tự luận ———
+   Toàn bộ màu đi qua token nên bảng này tự đổi theo chế độ sáng/tối. */
+.coach-locked { margin-top:18px;padding:16px 18px;border:1px dashed var(--line-dashed);background:var(--surface-alt); }
+.coach-locked strong { display:block;margin-bottom:7px;font:800 13px/1 var(--font-geist-sans),sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--mint-dark); }
+.coach-locked p { margin:0 0 8px;color:var(--muted);font-size:14px;line-height:1.6; }
+.coach-progress { color:var(--ink-soft)!important; }
+.coach-progress strong { display:inline;margin:0;font:inherit;font-weight:800;letter-spacing:normal;text-transform:none;color:var(--ink); }
+
+.coach-panel { margin-top:18px; }
+.coach-toggle { padding:11px 16px;border:1px solid var(--border-ink);background:var(--fill-ink);color:var(--on-ink);cursor:pointer;font-size:13px;font-weight:800; }
+.coach-body { margin-top:14px;padding:18px;border:1px solid var(--line);background:var(--surface-panel); }
+.coach-contract { margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.6; }
+.coach-contract strong { color:var(--ink); }
+.coach-form label { display:block;margin-bottom:7px;color:var(--ink-soft);font:700 13px/1 var(--font-geist-sans),sans-serif;letter-spacing:.08em; }
+.coach-input-row { display:flex;gap:9px; }
+.coach-input-row input { flex:1;min-width:0;padding:10px;border:1px solid var(--line-soft);background:var(--card);color:var(--ink);font-size:14px; }
+.coach-input-row button { padding:10px 18px;border:1px solid var(--border-ink);background:var(--fill-ink);color:var(--on-ink);cursor:pointer;font-size:13px;font-weight:800; }
+.coach-input-row button:disabled { border-color:var(--line-muted);background:transparent;color:var(--muted);cursor:not-allowed; }
+.coach-results { margin-top:16px; }
+.coach-empty { margin:0;padding:13px;border-left:3px solid var(--warn-line);background:var(--surface-amber);color:var(--warn-ink);font-size:14px;line-height:1.6; }
+.coach-hit-list { list-style:none;margin:0;padding:0;display:grid;gap:11px; }
+.coach-hit-list li { padding:15px 16px;border:1px solid var(--line);background:var(--card); }
+.coach-kind { display:inline-block;margin-bottom:8px;padding:4px 8px;background:var(--surface-teal);color:var(--mint-dark);font:800 12px/1 var(--font-geist-sans),sans-serif;letter-spacing:.09em;text-transform:uppercase; }
+.coach-hit-list strong { display:block;margin-bottom:7px;font-size:15px;line-height:1.4; }
+.coach-hit-list p { margin:0 0 10px;color:var(--muted);font-size:14px;line-height:1.65; }
+.coach-challenge { padding:10px 12px;border-left:3px solid var(--mint-dark);background:var(--surface-teal);color:var(--accent-ink)!important;font-weight:600; }
+.coach-hit-list a { padding-bottom:3px;border-bottom:1px solid;color:var(--mint-dark);font-size:13px;font-weight:750; }
+@media (max-width: 620px) { .coach-input-row { flex-direction:column; } }
+.coach-retry { padding:0;border:0;border-bottom:1px solid;background:transparent;color:inherit;cursor:pointer;font:inherit;font-weight:800; }

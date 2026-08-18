@@ -35,6 +35,9 @@ yarn-error.log*
 .vercel
 
 /dist/
+# Thư mục `dist` cũ đang chờ xoá; xem scripts/run-vinext.mjs. Bình thường biến
+# mất ngay, chỉ còn lại nếu tiến trình bị giết đúng lúc.
+/dist.stale-*/
 /.wrangler/
 /outputs/
 /work/
@@ -50,6 +53,7 @@ __pycache__/
 # PERF-P3-01: chunk chi tiết assessment được sinh từ content/ trong mọi lần
 # chạy scripts/run-vinext.mjs. Commit chúng sẽ tạo hai nguồn sự thật.
 /public/data/assessments/
+/public/data/coach/
 
 # Tệp khoá tạm của Microsoft Office, sinh ra khi mở .docx/.xlsx và biến mất khi
 # đóng. Chúng đã từng lọt vào một commit.

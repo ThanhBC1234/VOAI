@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * Bảng màu cho các biểu đồ vẽ bằng `<canvas>` ở phòng lab.
@@ -102,16 +102,31 @@ const DARK: LabPalette = {
  * đó là kết quả **cuối cùng** của cả lựa chọn thủ công lẫn cài đặt hệ điều
  * hành, nên chỉ cần một nguồn tín hiệu là biểu đồ luôn vẽ đúng chế độ đang hiện.
  */
+function subscribeToTheme(onChange: () => void): () => void {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+
+function themeIsDark(): boolean {
+  return document.documentElement.dataset.theme === "dark";
+}
+
+/**
+ * Máy chủ không biết người dùng chọn chế độ nào, nên bản dựng sẵn luôn là bản
+ * sáng. Trả `false` ở đây để React dùng đúng giá trị đó cho lượt hydrate rồi
+ * mới đổi sang giá trị thật — nhờ vậy markup khớp nhau, không có cảnh báo
+ * hydrate dù vài ô nhiệt của lab mang màu nội tuyến.
+ */
+function themeIsDarkOnServer(): boolean {
+  return false;
+}
+
 export function useLabPalette(): LabPalette {
-  const [dark, setDark] = useState(false);
-
-  useEffect(() => {
-    const read = () => setDark(document.documentElement.dataset.theme === "dark");
-    read();
-    const observer = new MutationObserver(read);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    return () => observer.disconnect();
-  }, []);
-
+  // `useSyncExternalStore` là API dành đúng cho việc đọc trạng thái nằm ngoài
+  // React. Cách cũ — `useState` cộng `setState` ngay trong thân effect — tạo
+  // thêm một lượt render nối tiếp cho mỗi lab, đúng thứ mà quy tắc
+  // `react-hooks/set-state-in-effect` cảnh báo.
+  const dark = useSyncExternalStore(subscribeToTheme, themeIsDark, themeIsDarkOnServer);
   return dark ? DARK : LIGHT;
 }

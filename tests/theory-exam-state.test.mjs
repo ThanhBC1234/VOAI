@@ -148,3 +148,76 @@ test("a restored attempt past its deadline reports zero seconds left", () => {
   const afterDeadline = attempt.deadlineEpochMs + 60_000;
   assert.equal(theory.secondsLeftUntil(attempt.deadlineEpochMs, afterDeadline), 0);
 });
+
+/* ------------------------------------------------------------------ */
+/* Lịch sử thi hỏng không được làm trắng trang                         */
+/* ------------------------------------------------------------------ */
+
+const validAttempt = {
+  seed: 1,
+  finishedAt: "2026-01-01T00:00:00.000Z",
+  scorePercent: 80,
+  correct: 8,
+  total: 10,
+  bySection: { "Nền tảng Toán & Tin": { correct: 8, total: 10 } },
+  byDifficulty: { advanced: { correct: 2, total: 4 } },
+};
+
+test("a well-formed attempt survives the round trip untouched", () => {
+  assert.deepEqual(theory.parseStoredAttempt(validAttempt), validAttempt);
+});
+
+test("an attempt missing seed is repaired rather than thrown away", () => {
+  const withoutSeed = { ...validAttempt };
+  delete withoutSeed.seed;
+  const parsed = theory.parseStoredAttempt(withoutSeed);
+  assert.notEqual(parsed, null, "seed không dùng khi hiển thị nên không đáng để loại bản ghi");
+  assert.equal(parsed.seed, 1);
+  assert.equal(parsed.scorePercent, 80);
+});
+
+test("attempts that would crash the gate evaluation are rejected", () => {
+  // Đây chính là dạng dữ liệu từng làm `Object.entries(undefined)` ném trong lúc
+  // render, và vì nó nằm trong storage nên ném lại ở **mọi** lần tải trang.
+  for (const broken of [
+    { ...validAttempt, bySection: undefined },
+    { ...validAttempt, byDifficulty: undefined },
+    { ...validAttempt, bySection: null },
+    { ...validAttempt, bySection: [] },
+    { ...validAttempt, bySection: { A: { correct: "tám", total: 10 } } },
+    { ...validAttempt, bySection: { A: null } },
+    { ...validAttempt, scorePercent: "tám mươi" },
+    { ...validAttempt, scorePercent: Number.NaN },
+    { ...validAttempt, finishedAt: "" },
+    null,
+    "một chuỗi",
+    [validAttempt],
+  ]) {
+    assert.equal(
+      theory.parseStoredAttempt(broken),
+      null,
+      `Phải từ chối: ${JSON.stringify(broken)}`,
+    );
+  }
+});
+
+test("the gate evaluation never throws on anything the parser accepted", () => {
+  // Ràng buộc thật sự cần giữ: parser là cửa duy nhất vào `evaluateGates`, nên
+  // mọi thứ nó cho qua đều phải chấm được mà không ném.
+  for (const candidate of [
+    validAttempt,
+    { ...validAttempt, bySection: {} },
+    { ...validAttempt, byDifficulty: {} },
+    { ...validAttempt, byDifficulty: { advanced: { correct: 0, total: 0 } } },
+  ]) {
+    const parsed = theory.parseStoredAttempt(candidate);
+    assert.notEqual(parsed, null);
+    assert.doesNotThrow(() =>
+      theory.evaluateGates({
+        scorePercent: parsed.scorePercent,
+        bySection: parsed.bySection,
+        byDifficulty: parsed.byDifficulty,
+      }),
+    );
+  }
+});

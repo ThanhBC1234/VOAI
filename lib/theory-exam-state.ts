@@ -100,6 +100,65 @@ export function evaluateGates(
 }
 
 /* ------------------------------------------------------------------ */
+/* Lịch sử các lần thi đã nộp                                          */
+/* ------------------------------------------------------------------ */
+
+export interface StoredAttempt {
+  seed: number;
+  finishedAt: string;
+  scorePercent: number;
+  correct: number;
+  total: number;
+  bySection: Record<string, ScoreBucket>;
+  byDifficulty: Record<string, ScoreBucket>;
+}
+
+function isScoreBuckets(value: unknown): value is Record<string, ScoreBucket> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every((bucket) => {
+    if (typeof bucket !== "object" || bucket === null) return false;
+    const { correct, total } = bucket as { correct?: unknown; total?: unknown };
+    return (
+      typeof correct === "number" && Number.isFinite(correct) &&
+      typeof total === "number" && Number.isFinite(total)
+    );
+  });
+}
+
+/**
+ * Kiểm định một bản ghi lịch sử đọc từ storage (THEORY-P1-04).
+ *
+ * Vì sao bắt buộc: trước đây mảng đọc lên được **ép kiểu thẳng** sang
+ * `StoredAttempt[]`. Chỉ cần một bản ghi thiếu `bySection` là `evaluateGates`
+ * gọi `Object.entries(undefined)` và ném ngay **trong lúc render** — nghĩa là
+ * trang trắng. Tệ hơn: dữ liệu nằm trong storage nên mỗi lần tải lại lại ném
+ * tiếp, người học bị khoá khỏi trang lý thuyết cho tới khi tự xoá storage.
+ *
+ * Bản ghi không hiểu được thì phải được **giữ lại** ở nơi gọi chứ không xoá,
+ * theo đúng nguyên tắc của `lib/local-storage.ts`: mất lịch sử của người học là
+ * lỗi nặng hơn việc bỏ qua một bản ghi lạ.
+ */
+export function parseStoredAttempt(value: unknown): StoredAttempt | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const candidate = value as Partial<StoredAttempt>;
+  const numbers = [candidate.scorePercent, candidate.correct, candidate.total];
+  if (!numbers.every((entry) => typeof entry === "number" && Number.isFinite(entry))) return null;
+  if (typeof candidate.finishedAt !== "string" || candidate.finishedAt.length === 0) return null;
+  if (!isScoreBuckets(candidate.bySection) || !isScoreBuckets(candidate.byDifficulty)) return null;
+  return {
+    // `seed` không được dùng khi hiển thị nên thiếu nó không đáng để loại cả bản
+    // ghi; chuẩn hoá về 1 thay vì vứt lịch sử của người học đi.
+    seed: typeof candidate.seed === "number" && Number.isFinite(candidate.seed) ? candidate.seed : 1,
+    finishedAt: candidate.finishedAt,
+    scorePercent: candidate.scorePercent as number,
+    correct: candidate.correct as number,
+    total: candidate.total as number,
+    bySection: candidate.bySection,
+    byDifficulty: candidate.byDifficulty,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* Đồng hồ theo deadline tuyệt đối                                     */
 /* ------------------------------------------------------------------ */
 

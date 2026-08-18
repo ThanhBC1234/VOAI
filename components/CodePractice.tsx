@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { InternalLink } from "./InternalLink";
 import { sitePath } from "../lib/site-path";
 import { readJson, writeJson } from "../lib/local-storage";
+import { useDraftWriter } from "../lib/draft-storage";
 
 type TestCase = { name: string; code: string };
 type Exercise = {
@@ -99,6 +100,7 @@ export function CodePractice() {
    * là mất bài làm thật của người học, không phải phiền toái nhỏ.
    */
   const draftsRef=useRef<Record<string,string>>({});
+  const draftWriter=useDraftWriter(ARENA_DRAFTS_KEY);
 
   useEffect(()=>()=>{ workerRef.current?.terminate(); if(timeoutRef.current) clearTimeout(timeoutRef.current); if(bootTimeoutRef.current) clearTimeout(bootTimeoutRef.current); },[]);
 
@@ -112,10 +114,17 @@ export function CodePractice() {
     return ()=>window.clearTimeout(timer);
   },[]);
 
-  /** Ghi nháp của bài hiện tại; giữ nguyên nháp của các bài khác. */
-  const persistDraft=(id:string,text:string)=>{
+  /**
+   * Ghi nháp của bài hiện tại; giữ nguyên nháp của các bài khác.
+   *
+   * `immediate` dành cho các mốc dứt khoát — đổi bài, xoá về đề gốc — nơi người
+   * học coi như đã "chốt" một trạng thái. Lúc gõ thì để `useDraftWriter` gộp
+   * nhịp, vì ghi đồng bộ trên từng ký tự làm khựng cả trình soạn thảo.
+   */
+  const persistDraft=(id:string,text:string,immediate=false)=>{
     draftsRef.current={...draftsRef.current,[id]:text};
-    writeJson(ARENA_DRAFTS_KEY,{version:1,drafts:draftsRef.current});
+    draftWriter.schedule({version:1,drafts:draftsRef.current});
+    if(immediate) draftWriter.flush();
   };
 
   const updateCode=(text:string)=>{ setCode(text); persistDraft(exerciseId,text); };
@@ -123,7 +132,7 @@ export function CodePractice() {
   const selectExercise=(id:string)=>{
     const next=exercises.find(item=>item.id===id)!;
     // Cất nháp bài đang mở trước khi rời đi, rồi nạp lại nháp của bài đích.
-    persistDraft(exerciseId,code);
+    persistDraft(exerciseId,code,true);
     setExerciseId(id);
     setCode(draftsRef.current[id] ?? next.starter);
     setResult(null); setMode("visible");
@@ -133,7 +142,7 @@ export function CodePractice() {
   const resetCode=()=>{
     const untouched=code.trim()===exercise.starter.trim();
     if(!untouched&&!window.confirm("Xoá toàn bộ code bạn đang viết và quay về đề gốc? Thao tác này không hoàn tác được.")) return;
-    setCode(exercise.starter); persistDraft(exerciseId,exercise.starter); setResult(null);
+    setCode(exercise.starter); persistDraft(exerciseId,exercise.starter,true); setResult(null);
   };
   const tests=mode==="visible"
     ? exercise.visible.map(test=>({...test,blind:false}))
@@ -218,6 +227,7 @@ export function CodePractice() {
         </div>
         <div className="editor-pane">
           <div className="editor-toolbar"><div><button className={mode==="visible"?"active":""} onClick={()=>{setMode("visible");setResult(null)}} disabled={status!=="idle"}>Test công khai</button><button className={mode==="blind"?"active":""} onClick={()=>{setMode("blind");setResult(null)}} disabled={status!=="idle"}>Nộp kiểm tra mù</button></div><button className="reset-code" onClick={resetCode} disabled={status!=="idle"}>Khôi phục</button></div>
+          {draftWriter.notice?<p className="storage-notice" role="status">{draftWriter.notice} Hãy sao chép code ra nơi khác trước khi rời trang.</p>:null}
           <p className="hidden-note">Kiểm tra mù chỉ giấu ca kiểm tra khỏi giao diện trước khi chạy. Nội dung vẫn nằm trong mã phía client và có thể xem qua source/bundle; đây là công cụ luyện tập, không phải cơ chế bảo mật.</p>
           <div className="code-editor"><div className="line-numbers">{lines.map(line=><span key={line}>{line}</span>)}</div><textarea spellCheck={false} value={code} onChange={e=>updateCode(e.target.value)} aria-label="Trình soạn thảo mã Python" disabled={status!=="idle"}/></div>
           <div className="runbar" aria-live="polite"><span>{status==="loading"?"Đang tải Python (~10 MB); chưa tính thời gian chạy…":status==="running"?"Đang chạy trong Web Worker…":"Python 3 · Web Worker · mã chạy tối đa 8 giây"}</span><button onClick={run} disabled={status!=="idle"}>{mode==="blind"?"Nộp bài":"Chạy test"} <b>▶</b></button></div>

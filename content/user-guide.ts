@@ -225,6 +225,25 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
           "Lần nộp đó không còn là bằng chứng SOLO-90. Đóng đáp án lại, ghi vào nhật ký, " +
           "và làm **một biến thể mới từ trang trắng**. Đây là quy tắc tự bảo vệ, không phải hình phạt.",
       },
+      {
+        kind: "text",
+        value:
+          "**Trợ giảng ngay trong phiếu Đánh giá.** Ở mục 01 của phiếu có một ô tra cứu nhỏ. " +
+          "Nó **không phải** một con AI biết nói: nó chỉ tìm trong chính giáo trình của dự án — " +
+          "350 câu lý thuyết, 78 bài giảng và lớp Toán — rồi trả về nguyên văn đoạn liên quan " +
+          "kèm một câu hỏi phản biện. Vì không có mô hình sinh chữ nào ở đây nên nó **không bịa " +
+          "được**; đổi lại, nó không chấm bài và không kết luận thay bạn.",
+      },
+      {
+        kind: "note",
+        tone: "info",
+        title: "Trợ giảng khoá cho tới khi bạn viết xong phần retrieval",
+        value:
+          "Phải tự trả lời **cả** các câu retrieval (mỗi câu từ 40 ký tự) thì ô tra cứu mới mở. " +
+          "Mở sẵn từ đầu sẽ biến một bài kiểm tra trí nhớ thành một bài tra cứu — đúng thứ mà " +
+          "SOLO-90 sinh ra để chặn. Hỏi xong mà không thấy gì, trợ giảng sẽ nói thẳng " +
+          "“không có trong giáo trình” chứ không đưa một đoạn na ná cho có.",
+      },
     ],
   },
   {

@@ -15,6 +15,13 @@
  */
 const PYODIDE_VERSION = "0.27.7";
 const CDN_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+/**
+ * CDN dự phòng. Băm dưới đây đã được đối chiếu trên chính hai nguồn này, nên
+ * lùi sang unpkg **không** hạ thấp mức kiểm tra: script vẫn phải khớp băm mới
+ * được chạy. Có nguồn thứ hai vì `public/pyodide/` thường không được đặt sẵn,
+ * và khi đó một mình jsDelivr hỏng hoặc bị chặn là mất hẳn Code Arena.
+ */
+const FALLBACK_CDN_BASE = `https://unpkg.com/pyodide@${PYODIDE_VERSION}/`;
 const SELF_HOSTED_BASE = new URL(`pyodide/v${PYODIDE_VERSION}/`, self.location.href).href;
 /**
  * Băm SRI của `pyodide.js` cho đúng `PYODIDE_VERSION` ở trên.
@@ -61,7 +68,7 @@ let runtimePromise;
 function getRuntime() {
   if (!runtimePromise) {
     runtimePromise = (async () => {
-      const bases = [SELF_HOSTED_BASE, CDN_BASE];
+      const bases = [SELF_HOSTED_BASE, CDN_BASE, FALLBACK_CDN_BASE];
       const failures = [];
       for (const base of bases) {
         try {
