@@ -13,7 +13,7 @@
  *   đi tra nguồn ngoài trong khi nội dung nằm ngay trong repo.
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { build } from "esbuild";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -22,27 +22,31 @@ import { pathToFileURL } from "node:url";
 
 import { emitCoachIndex } from "../scripts/emit-coach-index.mjs";
 
-/** Nạp module TypeScript bằng cách bundle qua esbuild, như các script khác. */
-function loadTypeScript(entry) {
+/**
+ * Nạp module TypeScript bằng **API JS** của esbuild, giống các script trong
+ * `scripts/`.
+ *
+ * Không được gọi `node node_modules/esbuild/bin/esbuild`: trên Linux, esbuild
+ * thay chính tệp đó bằng binary gốc lúc cài, nên Node sẽ cố parse ELF thành
+ * JavaScript và chết với "Invalid or unexpected token". Trên Windows tệp ấy vẫn
+ * là shim JS nên lỗi này **chỉ lộ ra trên CI**.
+ */
+async function loadTypeScript(entry) {
   const scratch = mkdtempSync(path.join(tmpdir(), "voai-coach-test-"));
   const outfile = path.join(scratch, "bundle.mjs");
   try {
-    execFileSync(
-      process.execPath,
-      [
-        path.join("node_modules", "esbuild", "bin", "esbuild"),
-        entry,
-        "--bundle",
-        "--format=esm",
-        "--platform=node",
-        "--log-level=silent",
-        `--outfile=${outfile}`,
-      ],
-      { stdio: "pipe" },
-    );
-    return import(pathToFileURL(outfile).href);
+    await build({
+      entryPoints: [entry],
+      outfile,
+      bundle: true,
+      format: "esm",
+      platform: "node",
+      target: "node22",
+      logLevel: "silent",
+    });
+    return await import(pathToFileURL(outfile).href);
   } finally {
-    process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+    rmSync(scratch, { recursive: true, force: true });
   }
 }
 
