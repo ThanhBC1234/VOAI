@@ -23,6 +23,7 @@ async function loadLessonTheorySource() {
       stdin: {
         contents: [
           'export { lessonDeepTheory, assertLessonTheoryCoverage } from "./content/lesson-theory/index.ts";',
+          'export { lessonPractice, assertLessonPracticeCoverage } from "./content/lesson-practice/index.ts";',
           'export { LESSON_THEORY_CHUNK_VERSION, lessonTheoryChunkPath } from "./content/lesson-theory/chunk-format.ts";',
           'export { coreLessonOrder } from "./content/lessons-core.ts";',
           'export { multimodalLessons } from "./content/lessons-multimodal.ts";',
@@ -103,9 +104,11 @@ export async function emitLessonTheoryChunks(options = {}) {
   const {
     LESSON_THEORY_CHUNK_VERSION,
     assertLessonTheoryCoverage,
+    assertLessonPracticeCoverage,
     coreLessonOrder,
     lessonDeepTheory,
     lessonTheoryChunkPath,
+    lessonPractice,
     multimodalLessons,
   } = await loadLessonTheorySource();
 
@@ -129,12 +132,14 @@ export async function emitLessonTheoryChunks(options = {}) {
 
   // Cổng bắt buộc trước mọi thao tác output: không phát hành một tập chunk nếu
   // thiếu bài, thừa bài hoặc một entry không đạt contract nội dung.
+  assertLessonPracticeCoverage(lessonIds);
   assertLessonTheoryCoverage(lessonIds);
 
   const chunks = lessonIds.map((lessonId) => ({
     version: LESSON_THEORY_CHUNK_VERSION,
     lessonId,
     theory: lessonDeepTheory[lessonId],
+    practice: lessonPractice[lessonId],
   }));
   fs.mkdirSync(outputDirectory, { recursive: true });
   if (fs.lstatSync(outputDirectory).isSymbolicLink()) {

@@ -186,6 +186,8 @@ export const ACTIVE_ATTEMPT_SCHEMA_VERSION = 1;
 
 export interface ActiveAttempt {
   version: number;
+  /** Seed tái tạo đúng bộ câu của attempt này. */
+  seed: number;
   attemptId: string;
   /** Thứ tự câu được chốt lúc bắt đầu; khôi phục phải giữ nguyên thứ tự này. */
   questionIds: string[];
@@ -199,9 +201,11 @@ export function createActiveAttempt(
   questionIds: readonly string[],
   nowEpochMs: number,
   attemptId: string,
+  seed = 1,
 ): ActiveAttempt {
   return {
     version: ACTIVE_ATTEMPT_SCHEMA_VERSION,
+    seed: Number.isFinite(seed) ? seed >>> 0 : 1,
     attemptId,
     questionIds: [...questionIds],
     responses: {},
@@ -244,6 +248,7 @@ export function parseActiveAttempt(raw: string | null | undefined): ActiveAttemp
     responses,
     startedAtEpochMs: candidate.startedAtEpochMs,
     deadlineEpochMs: candidate.deadlineEpochMs,
+    seed: typeof candidate.seed === "number" && Number.isFinite(candidate.seed) ? candidate.seed >>> 0 : 1,
     submitted: candidate.submitted,
   };
 }
@@ -253,5 +258,6 @@ export function activeAttemptIsUsable(
   attempt: ActiveAttempt,
   knownQuestionIds: ReadonlySet<string>,
 ): boolean {
+  if (new Set(attempt.questionIds).size !== attempt.questionIds.length) return false;
   return attempt.questionIds.every((id) => knownQuestionIds.has(id));
 }

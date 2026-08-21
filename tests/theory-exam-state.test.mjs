@@ -119,6 +119,18 @@ test("an active attempt round-trips through storage with its question order", ()
   assert.deepEqual(restored.responses, { a: 2 });
   assert.equal(restored.deadlineEpochMs, 1_000 + theory.MOCK_DURATION_MS);
   assert.equal(restored.submitted, false);
+  assert.equal(restored.seed, 1);
+});
+
+test("active attempts snapshot their selected seed and repair legacy records", () => {
+  const selected = theory.createActiveAttempt(["a", "b"], 1_000, "attempt-seeded", 2_027);
+  assert.equal(theory.parseActiveAttempt(JSON.stringify(selected)).seed, 2_027);
+
+  const legacy = { ...selected };
+  delete legacy.seed;
+  const restoredLegacy = theory.parseActiveAttempt(JSON.stringify(legacy));
+  assert.notEqual(restoredLegacy, null);
+  assert.equal(restoredLegacy.seed, 1);
 });
 
 test("malformed or stale storage falls back to null instead of throwing", () => {
@@ -141,6 +153,11 @@ test("an attempt referencing unknown questions is rejected", () => {
   const attempt = theory.createActiveAttempt(["a", "đã-xoá"], 0, "attempt-2");
   assert.equal(theory.activeAttemptIsUsable(attempt, new Set(["a", "b"])), false);
   assert.equal(theory.activeAttemptIsUsable(attempt, new Set(["a", "đã-xoá"])), true);
+});
+
+test("an attempt with duplicate question ids is rejected", () => {
+  const attempt = theory.createActiveAttempt(["a", "a"], 0, "attempt-duplicate");
+  assert.equal(theory.activeAttemptIsUsable(attempt, new Set(["a"])), false);
 });
 
 test("a restored attempt past its deadline reports zero seconds left", () => {

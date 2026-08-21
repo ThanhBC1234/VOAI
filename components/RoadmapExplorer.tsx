@@ -1,21 +1,30 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { InternalLink } from "./InternalLink";
 import type { CurriculumSession, SyllabusCoverageItem, WeekPlan } from "../content/curriculum";
 import { WEEK_LECTURES } from "../content/week-lectures";
+import {
+  LEARNING_PROGRESS_EVENT,
+  LEARNING_PROGRESS_STORAGE_KEY,
+  describeLearningProgressWriteResult,
+  MAX_PROGRESS_IMPORT_BYTES,
+  MAX_PROGRESS_IDS,
+  isLearningProgressId,
+  mergeLearningProgress,
+  parseProgressImport,
+  readLearningProgress,
+  toggleLearningProgress,
+} from "../lib/learning-progress";
 import { buildRoadmapGroups } from "../lib/roadmap-groups";
-import { describeWriteStatus, partitionKnownIds, readJson, writeJson } from "../lib/local-storage";
-
-const COMPLETED_STORAGE_KEY = "voai-completed-sessions";
-const acceptIdList = (value: unknown): string[] | null =>
-  Array.isArray(value) && value.every((item) => typeof item === "string") ? (value as string[]) : null;
+import { partitionKnownIds, readRaw } from "../lib/local-storage";
 
 type Milestone = { week: number; date: string; title: string };
 type Props = { weeks: readonly WeekPlan[]; sessions: readonly CurriculumSession[]; milestones: readonly Milestone[]; coverage: readonly SyllabusCoverageItem[] };
 const domainColors: Record<string,string> = { Python:"mint",Math:"mint",Data:"sky",ML:"sky",DL:"violet",CV:"coral",NLP:"gold",Audio:"gold",Multimodal:"coral",VOAI:"dark",Project:"dark" };
 const kindLabel = {lesson:"Bài",lab:"Lab",checkpoint:"Kiểm tra",finale:"Tổng kết"};
 const VIETNAM_TIME_ZONE="Asia/Ho_Chi_Minh";
+const PROGRESS_STORE_LOCKED_NOTICE="Kho tiến độ hiện có bị hỏng, sai định dạng hoặc vượt giới hạn. Các nút đánh dấu, nhập và xuất đã được khóa để giữ nguyên dữ liệu gốc trong trình duyệt.";
 
 function vietnamCalendarDate(date=new Date()){
   const parts=new Intl.DateTimeFormat("en",{timeZone:VIETNAM_TIME_ZONE,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(date);
@@ -23,11 +32,81 @@ function vietnamCalendarDate(date=new Date()){
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+type RoadmapImportGate = { current: boolean };
+
+/** Mutex đồng bộ: React state chưa render lại vẫn không mở được thao tác thứ hai. */
+export function claimRoadmapImport(gate: RoadmapImportGate): boolean {
+  if (gate.current) return false;
+  gate.current = true;
+  return true;
+}
+
+export function releaseRoadmapImport(gate: RoadmapImportGate): void {
+  gate.current = false;
+}
+
+export function isRoadmapImportActive(gate: RoadmapImportGate): boolean {
+  return gate.current;
+}
+
+export type RoadmapProgressInspection =
+  | { status: "missing"; completed: [] }
+  | { status: "valid"; completed: string[] }
+  | { status: "invalid" };
+
+/** Phân biệt kho thật sự rỗng với JSON hỏng/sai schema; không tự sửa raw. */
+export function inspectRoadmapProgressRaw(raw: string | null): RoadmapProgressInspection {
+  if (raw === null) return { status: "missing", completed: [] };
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return { status: "invalid" };
+  }
+  if (!Array.isArray(value)) return { status: "invalid" };
+  const completed: string[] = [];
+  const seen = new Set<string>();
+  for (const id of value) {
+    if (!isLearningProgressId(id)) return { status: "invalid" };
+    if (seen.has(id)) continue;
+    seen.add(id);
+    completed.push(id);
+    if (completed.length > MAX_PROGRESS_IDS) return { status: "invalid" };
+  }
+  return { status: "valid", completed };
+}
+
+export function prepareRoadmapProgressExport(
+  raw: string | null,
+  exportedAt: string,
+):
+  | { ok: false }
+  | { ok: true; payload: { format: "voai-lab-progress"; version: 1; exportedAt: string; completed: string[] } } {
+  const inspection = inspectRoadmapProgressRaw(raw);
+  if (inspection.status === "invalid") return { ok: false };
+  return {
+    ok: true,
+    payload: {
+      format: "voai-lab-progress",
+      version: 1,
+      exportedAt,
+      completed: [...inspection.completed],
+    },
+  };
+}
+
+export function roadmapProgressActionsLocked(
+  importGate: RoadmapImportGate,
+  writesAllowed: RoadmapImportGate,
+): boolean {
+  return isRoadmapImportActive(importGate) || !writesAllowed.current;
+}
+
 /** Một dòng phiên học; dùng chung cho khối tuần và khối Finale để hành vi giống hệt nhau. */
-function SessionRow({session,done,onToggle}:{session:CurriculumSession;done:boolean;onToggle:()=>void}){
+function SessionRow({session,done,onToggle,disabled}:{session:CurriculumSession;done:boolean;onToggle:()=>void;disabled:boolean}){
   return (
     <div className={done?"done":""}>
-      <button onClick={onToggle} aria-label={done?`Đánh dấu chưa xong: ${session.title}`:`Đánh dấu hoàn thành: ${session.title}`} aria-pressed={done}>{done?"✓":""}</button>
+      <button onClick={onToggle} disabled={disabled} aria-label={done?`Đánh dấu chưa xong: ${session.title}`:`Đánh dấu hoàn thành: ${session.title}`} aria-pressed={done}>{done?"✓":""}</button>
       <span>{session.date}<small>{kindLabel[session.kind]} · {session.coreMinutes}/{session.deepMinutes} phút</small></span>
       <div>
         <strong>{session.title}</strong>
@@ -43,24 +122,67 @@ export function RoadmapExplorer({weeks,sessions,milestones,coverage}:Props){
   const [domain,setDomain]=useState("Tất cả"); const [query,setQuery]=useState(""); const [openGroup,setOpenGroup]=useState<string|null>("week-1");
   const [completed,setCompleted]=useState<Set<string>>(new Set()); const [view,setView]=useState<"weeks"|"coverage">("weeks");
   const [storageNotice,setStorageNotice]=useState<string|null>(null);
+  const [isImporting,setIsImporting]=useState(false);
+  const [progressHydrated,setProgressHydrated]=useState(false);
+  const [progressStoreLocked,setProgressStoreLocked]=useState(false);
+  const importInputRef=useRef<HTMLInputElement|null>(null);
+  const importingRef=useRef(false);
+  const progressWritesAllowedRef=useRef(false);
   // ID không còn trong curriculum được giữ lại nguyên vẹn (archived) để đổi nội
   // dung không âm thầm xoá lịch sử; chỉ phần `active` được tính vào phần trăm.
   const archivedRef=useRef<string[]>([]);
   const sessionIds=useMemo(()=>new Set(sessions.map(session=>session.id)),[sessions]);
 
-  useEffect(()=>{const timer=window.setTimeout(()=>{
-    const stored=readJson(COMPLETED_STORAGE_KEY,acceptIdList,[] as string[]);
-    const {active,archived}=partitionKnownIds(stored,sessionIds);
+  useEffect(()=>{
+    const hydrateProgress=()=>{
+      const inspection=inspectRoadmapProgressRaw(readRaw(LEARNING_PROGRESS_STORAGE_KEY));
+      if(inspection.status==="invalid"){
+        // Không biến raw hỏng/quá giới hạn thành []: khóa mọi đường ghi/xuất.
+        progressWritesAllowedRef.current=false;
+        setProgressStoreLocked(true);
+        setProgressHydrated(true);
+        setStorageNotice(PROGRESS_STORE_LOCKED_NOTICE);
+        return;
+      }
+      const {active,archived}=partitionKnownIds(inspection.completed,sessionIds);
+      archivedRef.current=archived;
+      progressWritesAllowedRef.current=true;
+      setCompleted(new Set(active));
+      setProgressStoreLocked(false);
+      setProgressHydrated(true);
+      setStorageNotice(current=>current===PROGRESS_STORE_LOCKED_NOTICE?null:current);
+    };
+    const timer=window.setTimeout(hydrateProgress,0);
+    const onProgressChange=()=>hydrateProgress();
+    const onStorage=(event:StorageEvent)=>{
+      if(event.key===LEARNING_PROGRESS_STORAGE_KEY) hydrateProgress();
+    };
+    window.addEventListener(LEARNING_PROGRESS_EVENT,onProgressChange);
+    window.addEventListener("storage",onStorage);
+    return()=>{
+      window.clearTimeout(timer);
+      window.removeEventListener(LEARNING_PROGRESS_EVENT,onProgressChange);
+      window.removeEventListener("storage",onStorage);
+    };
+  },[sessionIds]);
+
+  const toggle=(id:string)=>{
+    if(roadmapProgressActionsLocked(importingRef,progressWritesAllowedRef))return;
+    const result=toggleLearningProgress(id);
+    const warning=describeLearningProgressWriteResult(result);
+    if(result.error){
+      if(result.error==="corrupt-storage"){
+        progressWritesAllowedRef.current=false;
+        setProgressStoreLocked(true);
+      }
+      setStorageNotice(warning);
+      return;
+    }
+    const {active,archived}=partitionKnownIds(result.completed,sessionIds);
     archivedRef.current=archived;
     setCompleted(new Set(active));
-  },0);return()=>window.clearTimeout(timer)},[sessionIds]);
-
-  const toggle=(id:string)=>setCompleted(current=>{
-    const next=new Set(current);
-    if(next.has(id))next.delete(id);else next.add(id);
-    setStorageNotice(describeWriteStatus(writeJson(COMPLETED_STORAGE_KEY,[...next,...archivedRef.current])));
-    return next;
-  });
+    setStorageNotice(warning?`${warning} Thay đổi đang thấy chỉ được giữ trong phiên này.`:null);
+  };
 
   // Một nguồn nhóm duy nhất cho cả hiển thị lẫn bộ đếm — gồm 41 tuần và khối Finale.
   const groups=useMemo(()=>buildRoadmapGroups(weeks,sessions),[weeks,sessions]);
@@ -78,6 +200,7 @@ export function RoadmapExplorer({weeks,sessions,milestones,coverage}:Props){
   }).filter((group):group is NonNullable<typeof group>=>group!==null),[groups,domain,needle]);
 
   const progress=Math.round(completed.size/sessions.length*100); const today=vietnamCalendarDate(); const current=sessions.find(item=>item.date>=today)??sessions.at(-1);
+  const progressActionsDisabled=!progressHydrated||progressStoreLocked||isImporting;
   /**
    * Xuất tiến độ ra tệp JSON.
    *
@@ -90,12 +213,70 @@ export function RoadmapExplorer({weeks,sessions,milestones,coverage}:Props){
    * Đây là đường duy nhất để người học mang tiến độ sang thiết bị khác, nên hỏng
    * âm thầm ở đây là mất dữ liệu thật.
    */
-  const exportProgress=()=>{const payload={format:"voai-lab-progress",version:1,exportedAt:new Date().toISOString(),completed:[...completed]};const url=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="voai-lab-progress.json";document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),0)};
+  const exportProgress=()=>{if(roadmapProgressActionsLocked(importingRef,progressWritesAllowedRef))return;
+    const prepared=prepareRoadmapProgressExport(
+      readRaw(LEARNING_PROGRESS_STORAGE_KEY),
+      new Date().toISOString(),
+    );
+    if(!prepared.ok){
+      progressWritesAllowedRef.current=false;
+      setProgressStoreLocked(true);
+      setStorageNotice(PROGRESS_STORE_LOCKED_NOTICE);
+      return;
+    }
+    const url=URL.createObjectURL(new Blob([JSON.stringify(prepared.payload,null,2)],{type:"application/json"}));
+    const link=document.createElement("a");
+    link.href=url;
+    link.download="voai-lab-progress.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(()=>URL.revokeObjectURL(url),0);
+  };
+
+  const importProgress=async(event:ChangeEvent<HTMLInputElement>)=>{
+    const input=event.currentTarget;
+    if(roadmapProgressActionsLocked(importingRef,progressWritesAllowedRef)){input.value="";return;}
+    const file=input.files?.[0];
+    input.value="";
+    if(!file)return;
+    if(file.size>MAX_PROGRESS_IMPORT_BYTES){setStorageNotice("Tệp tiến độ vượt quá giới hạn an toàn của backup.");return;}
+
+    if(!claimRoadmapImport(importingRef))return;
+    setIsImporting(true);
+    try{
+      const parsed=parseProgressImport(await file.text(),file.size);
+      if(!parsed.ok){setStorageNotice(parsed.error);return;}
+
+      // `file.text()` vừa nhường event loop: đọc lại canonical để không dùng
+      // closure `completed` cũ và không ghi đè tiến độ vừa đổi từ nguồn khác.
+      const before=readLearningProgress();
+      const beforeSet=new Set(before);
+      const result=mergeLearningProgress([...before,...parsed.completed]);
+      if(result.status!=="ok"){
+        const warning=describeLearningProgressWriteResult(result);
+        setStorageNotice(`Không thể nhập và lưu tiến độ. ${warning??"Dữ liệu tiến độ hiện có không thay đổi."}`);
+        return;
+      }
+
+      const {active,archived}=partitionKnownIds(result.completed,sessionIds);
+      archivedRef.current=archived;
+      setCompleted(new Set(active));
+
+      const added=parsed.completed.filter(id=>!beforeSet.has(id)).length;
+      setStorageNotice(`Đã nhập và hợp nhất tiến độ: ${added} mục mới, không xoá dữ liệu hiện có.`);
+    }catch{
+      setStorageNotice("Không đọc được tệp tiến độ. Hãy chọn lại tệp JSON đã xuất từ VOAI Lab.");
+    }finally{
+      releaseRoadmapImport(importingRef);
+      setIsImporting(false);
+    }
+  };
 
   return (
     <section className="roadmap-app">
-      <div className="progress-strip"><div className="progress-copy"><span>TIẾN ĐỘ CỤC BỘ</span><strong>{completed.size}/{sessions.length} phiên · {progress}%</strong></div><div className="progress-track"><i style={{width:`${progress}%`}}/></div><div className="progress-actions"><span>{current?`Tiếp theo: ${current.date} · ${current.title}`:"Đã hoàn thành"}</span><button onClick={exportProgress}>Xuất tiến độ</button></div></div>
-      {storageNotice?<p className="storage-notice" role="status">{storageNotice}</p>:null}
+      <div className="progress-strip"><div className="progress-copy"><span>TIẾN ĐỘ CỤC BỘ</span><strong>{completed.size}/{sessions.length} phiên · {progress}%</strong></div><div className="progress-track"><i style={{width:`${progress}%`}}/></div><div className="progress-actions"><span>{current?`Tiếp theo: ${current.date} · ${current.title}`:"Đã hoàn thành"}</span><input ref={importInputRef} hidden type="file" accept="application/json,.json" disabled={progressActionsDisabled} onChange={importProgress}/><button type="button" onClick={()=>importInputRef.current?.click()} disabled={progressActionsDisabled}>{isImporting?"Đang nhập…":"Nhập & hợp nhất"}</button><button type="button" onClick={exportProgress} disabled={progressActionsDisabled}>Xuất tiến độ</button></div></div>
+      {storageNotice?<p className="storage-notice" role="status" aria-live="polite">{storageNotice}</p>:null}
       <div className="roadmap-toolbar"><div><button className={view==="weeks"?"active":""} onClick={()=>setView("weeks")}>41 tuần + tổng kết</button><button className={view==="coverage"?"active":""} onClick={()=>setView("coverage")}>Ma trận IOAI</button></div>{view==="weeks"&&<><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Tìm thuật toán hoặc chủ đề…" aria-label="Tìm trong lộ trình"/><select value={domain} onChange={e=>setDomain(e.target.value)} aria-label="Lọc lĩnh vực">{domains.map(item=><option key={item}>{item}</option>)}</select></>}</div>
       {view==="weeks"?<div className="week-list">
         {visibleGroups.map(group=>{
@@ -111,7 +292,7 @@ export function RoadmapExplorer({weeks,sessions,milestones,coverage}:Props){
                   <div className="week-meter"><strong>{done}/{total}</strong><i><b style={{width:`${total?done/total*100:0}%`}}/></i></div>
                   <span className="expand-mark">{expanded?"−":"+"}</span>
                 </button>
-                {expanded&&<div className="week-detail"><div className="week-context"><div><span>VÌ SAO TÁCH RIÊNG</span><p>Ba phiên này nằm sau tuần 41 nên không gắn với tuần nào, nhưng vẫn nằm trong tổng {sessions.length} phiên và vẫn phải đánh dấu hoàn thành như mọi phiên khác.</p></div></div><div className="session-list">{group.sessions.map(session=><SessionRow key={session.id} session={session} done={completed.has(session.id)} onToggle={()=>toggle(session.id)}/>)}</div></div>}
+                {expanded&&<div className="week-detail"><div className="week-context"><div><span>VÌ SAO TÁCH RIÊNG</span><p>Ba phiên này nằm sau tuần 41 nên không gắn với tuần nào, nhưng vẫn nằm trong tổng {sessions.length} phiên và vẫn phải đánh dấu hoàn thành như mọi phiên khác.</p></div></div><div className="session-list">{group.sessions.map(session=><SessionRow key={session.id} session={session} done={completed.has(session.id)} disabled={progressActionsDisabled} onToggle={()=>toggle(session.id)}/>)}</div></div>}
               </article>
             );
           }
@@ -124,7 +305,7 @@ export function RoadmapExplorer({weeks,sessions,milestones,coverage}:Props){
                 <div className="week-meter"><strong>{done}/{total}</strong><i><b style={{width:`${total?done/total*100:0}%`}}/></i></div>
                 <span className="expand-mark">{expanded?"−":"+"}</span>
               </button>
-              {expanded&&<div className="week-detail"><div className="week-context"><div><span>MỤC TIÊU</span><ul>{week.objectives.map(item=><li key={item}>{item}</li>)}</ul></div><div><span>ĐẦU RA TUẦN</span><p>{week.deliverable}</p><span>ĐIỀU KIỆN QUA</span><p>{week.assessment.gate}</p></div></div><div className="week-lectures"><strong>BÀI GIẢNG NÊN ĐỌC TRONG TUẦN</strong><div>{lectures.map(item=><InternalLink key={item.id} href={`/lessons?lesson=${encodeURIComponent(item.id)}`}>{item.label} →</InternalLink>)}</div></div><div className="session-list">{group.sessions.map(session=><SessionRow key={session.id} session={session} done={completed.has(session.id)} onToggle={()=>toggle(session.id)}/>)}</div></div>}
+              {expanded&&<div className="week-detail"><div className="week-context"><div><span>MỤC TIÊU</span><ul>{week.objectives.map(item=><li key={item}>{item}</li>)}</ul></div><div><span>ĐẦU RA TUẦN</span><p>{week.deliverable}</p><span>ĐIỀU KIỆN QUA</span><p>{week.assessment.gate}</p></div></div><div className="week-lectures"><strong>BÀI GIẢNG NÊN ĐỌC TRONG TUẦN</strong><div>{lectures.map(item=><InternalLink key={item.id} href={`/lessons?lesson=${encodeURIComponent(item.id)}`}>{item.label} →</InternalLink>)}</div></div><div className="session-list">{group.sessions.map(session=><SessionRow key={session.id} session={session} done={completed.has(session.id)} disabled={progressActionsDisabled} onToggle={()=>toggle(session.id)}/>)}</div></div>}
             </article>
           );
         })}

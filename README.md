@@ -125,11 +125,13 @@ theo tuần, không phải quan hệ 1:1 giữa 205 phiên loại `lesson` và 7
 outcome/kế hoạch của từng phiên vẫn là hợp đồng công việc cụ thể.
 
 Tiến độ và các attempt đánh giá nằm trong `localStorage` của đúng trình duyệt và origin đang
-dùng. Hãy bấm **Xuất tiến độ** tại `/roadmap` và **Xuất attempts JSON** tại
-`/assessments` định kỳ. Xóa dữ liệu website, đổi
-trình duyệt hoặc đổi origin có thể làm mất bản đang lưu. Mã đang gõ tại
-`/practice` không được lưu tự động; hãy chép bài làm sang tệp cá nhân trước khi
-đổi bài hoặc tải lại trang.
+dùng. Tại `/roadmap`, dùng **Xuất tiến độ** và **Nhập & hợp nhất**; tại
+`/assessments`, dùng **Xuất attempts JSON (kèm bản nháp)** và **Nhập & hợp nhất JSON**.
+Khi đổi máy, hãy xuất cả hai file ở máy cũ rồi nhập chúng tại hai trang tương ứng trên máy mới;
+dữ liệu được hợp nhất thay vì xoá phần đang có. Xóa dữ liệu website, đổi trình duyệt hoặc đổi
+origin vẫn có thể làm mất bản chưa sao lưu. Code tại `/practice` được tự lưu riêng cho từng bài
+và còn nguyên khi đổi bài hoặc tải lại trang; hãy tiếp tục chép phiên bản quan trọng sang tệp
+cá nhân hoặc repository vì hai file backup trên không chứa source code Code Arena.
 
 Ở `/practice`, mỗi lần bấm chạy/nộp tạo một Web Worker mới và khởi tạo Pyodide
 từ CDN trong trạng thái bootstrap riêng; cache HTTP của trình duyệt có thể giảm

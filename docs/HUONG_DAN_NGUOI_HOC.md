@@ -170,13 +170,15 @@ do người học tự tạo theo tuần, không chờ một notebook dựng s�
 3. Mở kế hoạch của đúng phiên; chép outcome thành mục tiêu một câu trong nhật ký.
 4. Dùng link **Làm assessment phiên này** để mở đúng phiếu 1:1 với session.
 5. Chỉ tick sau khi đã có artifact, self-check và một attempt thủ công đã lưu.
-6. Cuối mỗi tuần bấm **Xuất tiến độ**, chuyển file JSON vào
-   `progress-backup` và thêm ngày vào tên file.
-7. Mỗi bốn tuần mở tab **Ma trận IOAI** và chọn ngẫu nhiên một artifact để kiểm
+6. Cuối mỗi tuần bấm **Xuất tiến độ** ở Lộ trình và **Xuất attempts JSON (kèm
+   bản nháp)** ở Đánh giá; chuyển cả hai file vào `progress-backup` và thêm ngày.
+7. Khi đổi máy/trình duyệt, mở hai trang tương ứng và dùng **Nhập & hợp nhất** /
+   **Nhập & hợp nhất JSON**; dữ liệu mới được gộp, không xoá phần đang có.
+8. Mỗi bốn tuần mở tab **Ma trận IOAI** và chọn ngẫu nhiên một artifact để kiểm
    chứng; không tự suy ra rằng “được ánh xạ” nghĩa là “đã biết”.
 
-Website không import snapshot trở lại và không đồng bộ thiết bị. Nhật ký và
-artifact cá nhân là nguồn khôi phục chính.
+Website không tự đồng bộ thiết bị. File backup giúp khôi phục tiến độ, attempt và
+bản nháp; nhật ký cùng artifact cá nhân vẫn là nguồn bằng chứng học tập chính.
 
 ### Ghi assessment thủ công của phiên
 
@@ -187,8 +189,9 @@ chứng formative/manual, không phải 290 chương trình chấm tự động.
    phiên.
 2. Trả lời toàn bộ câu retrieval trước khi mở tài liệu. Giao diện hiện không
    khóa ô retrieval, không ẩn coding task trước bước này và không ghi timestamp
-   bắt đầu; kỷ luật closed-book do người học tự giữ. Nếu cần rời trang, ghi câu
-   trả lời vào nhật ký vì draft chưa bấm lưu chỉ nằm trong React state.
+   bắt đầu; kỷ luật closed-book do người học tự giữ. Bản nháp được tự lưu trong
+   trình duyệt và còn nguyên khi tải lại trang; vẫn ghi phần quan trọng vào nhật
+   ký và xuất backup định kỳ vì dữ liệu này không tự đồng bộ sang thiết bị khác.
 3. Tự làm code/notebook bên ngoài form; sau đó dán mô tả file/commit, lệnh chạy,
    test và kết quả vào **Bằng chứng code**. Link repository là tùy chọn.
 4. Viết phần giải thích bắt buộc bằng lời của mình: data flow/shape, lựa chọn,
@@ -239,13 +242,17 @@ phỏng trọng điểm, không phải simulator cho mọi bài trong catalog.
 
 ## 11. Dùng Code Arena trong trình duyệt
 
-1. Chọn bài và chép starter vào tệp cá nhân để tránh mất code.
+1. Chọn bài; editor tự lưu riêng theo từng bài, nhưng vẫn chép bản quan trọng vào tệp cá nhân.
 2. Viết ít nhất ba test riêng trên giấy/tệp trước.
 3. Tự cài trong editor.
 4. Chạy **Test công khai**; đọc loại lỗi, không dò ca kiểm tra mù.
 5. Sửa nguyên nhân gốc và chạy lại.
 6. Chỉ bấm **Nộp kiểm tra mù** khi test công khai và test tự viết đã đạt.
 7. Chép phiên bản đạt ra tệp rồi chấm lại bằng CLI từ process sạch.
+
+Code đang gõ còn nguyên khi đổi bài hoặc tải lại trang. Nút **Khôi phục** mới
+xoá bản nháp của bài hiện tại sau khi hỏi lại. Backup Lộ trình/Đánh giá không
+chứa source code Code Arena, vì vậy hãy lưu phiên bản đạt vào tệp hoặc repository.
 
 Mỗi lần bấm chạy/nộp, giao diện terminate worker cũ nếu còn và tạo một Web
 Worker mới. Worker tải/khởi tạo Pyodide từ CDN trong trạng thái bootstrap riêng;
@@ -432,9 +439,10 @@ serialize. Thu nhỏ tới case công khai trước khi nghĩ tới private test
 
 ### Mất tiến độ web
 
-Tìm cả progress JSON từ `/roadmap` và attempts JSON từ `/assessments`. Giao diện
-hiện chưa import hai snapshot này tự động, vì vậy dùng file để đối chiếu và nhập
-lại thủ công; artifact/nhật ký vẫn là nguồn thật.
+Tìm cả progress JSON từ `/roadmap` và attempts JSON từ `/assessments`. Trên đúng
+hai trang đó, bấm **Nhập & hợp nhất** và **Nhập & hợp nhất JSON** rồi chọn file
+tương ứng; dữ liệu được gộp với bản hiện có. Artifact/nhật ký vẫn là nguồn bằng
+chứng học tập chính.
 
 ## 19. Checklist cuối ngày và cuối tuần
 

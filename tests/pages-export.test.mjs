@@ -180,7 +180,7 @@ test("Pages export ships every assessment detail chunk the catalog points at", a
   assert.equal((assessments.match(/data-assessment-item=/g) ?? []).length, 290);
 });
 
-test("Pages export ships exactly one safe theory chunk for every lesson", async () => {
+test("Pages export ships exactly one safe theory and practice chunk for every lesson", async () => {
   const chunkDirectory = path.join(artifactRoot, "data", "lesson-theory");
   assert.ok(await exists(chunkDirectory), "Missing data/lesson-theory in Pages export");
 
@@ -199,7 +199,7 @@ test("Pages export ships exactly one safe theory chunk for every lesson", async 
     lessonIds.add(lessonId);
 
     const chunk = JSON.parse(await readFile(path.join(chunkDirectory, file), "utf8"));
-    assert.equal(chunk.version, 1, `${file} has an unsupported envelope version`);
+    assert.equal(chunk.version, 2, `${file} has an unsupported envelope version`);
     assert.equal(chunk.lessonId, lessonId, `${file} lessonId does not match its filename`);
     assert.ok(
       chunk.theory && typeof chunk.theory === "object" && !Array.isArray(chunk.theory),
@@ -209,6 +209,15 @@ test("Pages export ships exactly one safe theory chunk for every lesson", async 
       chunk.theory.lessonId,
       lessonId,
       `${file} theory.lessonId does not match its filename`,
+    );
+    assert.ok(
+      chunk.practice && typeof chunk.practice === "object" && !Array.isArray(chunk.practice),
+      `${file} has no practice object`,
+    );
+    assert.equal(
+      chunk.practice.lessonId,
+      lessonId,
+      `${file} practice.lessonId does not match its filename`,
     );
   }
   assert.equal(lessonIds.size, 78, "Theory chunks do not cover 78 unique lesson IDs");

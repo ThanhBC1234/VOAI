@@ -19,6 +19,7 @@ if (previousBasePath === undefined) delete process.env.NEXT_PUBLIC_BASE_PATH;
 else process.env.NEXT_PUBLIC_BASE_PATH = previousBasePath;
 
 const theoryModule = await loadTypeScriptModule("content/lesson-theory/index.ts");
+const practiceModule = await loadTypeScriptModule("content/lesson-practice/index.ts");
 const coreModule = await loadTypeScriptModule("content/lessons-core.ts");
 const multimodalModule = await loadTypeScriptModule("content/lessons-multimodal.ts");
 
@@ -29,11 +30,16 @@ const {
 } = chunkFormatModule;
 const {
   cachedLessonTheoryDetails,
+  cachedLessonPracticeDetails,
+  loadLessonDetails,
+  loadLessonPracticeDetails,
   loadLessonTheoryDetails,
+  parseLessonDetailsChunk,
   parseLessonTheoryChunk,
   resetLessonTheoryDetailsCache,
 } = loaderModule;
 const { assertLessonTheoryCoverage, lessonDeepTheory } = theoryModule;
+const { assertLessonPracticeCoverage, lessonPractice } = practiceModule;
 const lessonIds = [
   ...coreModule.coreLessonOrder,
   ...multimodalModule.multimodalLessons.map((lesson) => lesson.id),
@@ -48,6 +54,7 @@ function chunkFor(lessonId) {
     version: LESSON_THEORY_CHUNK_VERSION,
     lessonId,
     theory: lessonDeepTheory[lessonId],
+    practice: lessonPractice[lessonId],
   };
 }
 
@@ -89,6 +96,7 @@ test("path chỉ nhận lesson ID kebab-case an toàn và giữ tên file JSON",
 test("emitter sinh đúng 78 file, đúng source, tất định và xóa orphan JSON an toàn", async () => {
   assert.equal(lessonIds.length, 78);
   assert.equal(new Set(lessonIds).size, 78);
+  assert.doesNotThrow(() => assertLessonPracticeCoverage(lessonIds));
   assert.doesNotThrow(() => assertLessonTheoryCoverage(lessonIds));
   assert.equal(emission.count, 78);
 
@@ -115,6 +123,7 @@ test("emitter sinh đúng 78 file, đúng source, tất định và xóa orphan 
     const parsed = JSON.parse(raw);
     assert.deepEqual(parsed, chunkFor(lessonId));
     assert.deepEqual(parseLessonTheoryChunk(lessonId, parsed), chunkFor(lessonId).theory);
+    assert.deepEqual(parseLessonDetailsChunk(lessonId, parsed), { theory: chunkFor(lessonId).theory, practice: chunkFor(lessonId).practice });
     expectedBytes += Buffer.byteLength(expected, "utf8");
   }
   assert.equal(emission.bytes, expectedBytes);
@@ -150,12 +159,16 @@ test("parser kiểm đủ phong bì và mọi cấu trúc lồng nhau của Less
   const lessonId = lessonIds[0];
   const good = chunkFor(lessonId);
   assert.deepEqual(parseLessonTheoryChunk(lessonId, clone(good)), good.theory);
+  assert.deepEqual(parseLessonDetailsChunk(lessonId, clone(good)), { theory: good.theory, practice: good.practice });
 
   const badValues = [
     null,
     "<html>404</html>",
     { ...good, version: 99 },
     { ...good, lessonId: lessonIds[1] },
+    { version: good.version, lessonId: good.lessonId, theory: good.theory },
+    { ...good, practice: { ...good.practice, lessonId: lessonIds[1] } },
+    { ...good, practice: { ...good.practice, experiment: { ...good.practice.experiment, variants: good.practice.experiment.variants.slice(0, 2) } } },
     { ...good, theory: { ...good.theory, lessonId: lessonIds[1] } },
     { ...good, theory: { ...good.theory, readingMinutes: "15" } },
     { ...good, theory: { ...good.theory, openingQuestions: ["chỉ một câu"] } },
@@ -187,9 +200,11 @@ test("parser kiểm đủ phong bì và mọi cấu trúc lồng nhau của Less
     { ...good, theory: { ...good.theory, sourceIds: ["d2l-en", "d2l-en"] } },
   ];
   for (const bad of badValues) {
+    assert.equal(parseLessonDetailsChunk(lessonId, bad), null);
     assert.equal(parseLessonTheoryChunk(lessonId, bad), null);
   }
   assert.throws(() => parseLessonTheoryChunk("../bad", good), /ID bài học không hợp lệ/);
+  assert.throws(() => parseLessonDetailsChunk("../bad", good), /ID bài học không hợp lệ/);
 });
 
 test("loader dùng sitePath, gộp inflight, cache thành công và retry sau thất bại", async () => {
@@ -205,13 +220,14 @@ test("loader dùng sitePath, gộp inflight, cache thành công và retry sau th
     return new Response("temporarily unavailable", { status: 503 });
   };
   await assert.rejects(
-    () => loadLessonTheoryDetails(lessonId, { fetchImplementation: failing }),
+    () => loadLessonDetails(lessonId, { fetchImplementation: failing }),
     /HTTP 503/,
   );
   assert.equal(calls, 1);
   assert.equal(requestedUrl, `/VOAI${lessonTheoryChunkPath(lessonId)}`);
   assert.equal(cachedLessonTheoryDetails(lessonId), null);
 
+  assert.equal(cachedLessonPracticeDetails(lessonId), null);
   calls = 0;
   const successful = async (url) => {
     calls += 1;
@@ -221,18 +237,22 @@ test("loader dùng sitePath, gộp inflight, cache thành công và retry sau th
     });
   };
   const [first, second] = await Promise.all([
-    loadLessonTheoryDetails(lessonId, { fetchImplementation: successful }),
-    loadLessonTheoryDetails(lessonId, { fetchImplementation: successful }),
+    loadLessonDetails(lessonId, { fetchImplementation: successful }),
+    loadLessonDetails(lessonId, { fetchImplementation: successful }),
   ]);
   assert.equal(calls, 1, "hai lời gọi đồng thời vẫn fetch hai lần");
   assert.equal(requestedUrl, `/VOAI${lessonTheoryChunkPath(lessonId)}`);
   assert.equal(first, second);
-  assert.deepEqual(first, good.theory);
-  assert.equal(cachedLessonTheoryDetails(lessonId), first);
+  assert.deepEqual(first, { theory: good.theory, practice: good.practice });
+  assert.equal(cachedLessonTheoryDetails(lessonId), first.theory);
+  assert.deepEqual(cachedLessonPracticeDetails(lessonId), first.practice);
 
-  const third = await loadLessonTheoryDetails(lessonId, { fetchImplementation: successful });
+  const third = await loadLessonDetails(lessonId, { fetchImplementation: successful });
   assert.equal(calls, 1, "theory đã cache vẫn bị fetch lại");
   assert.equal(third, first);
+  assert.equal(await loadLessonTheoryDetails(lessonId, { fetchImplementation: successful }), first.theory);
+  assert.equal(await loadLessonPracticeDetails(lessonId, { fetchImplementation: successful }), first.practice);
+  assert.equal(calls, 1, "adapter đã làm phát sinh fetch mới");
   resetLessonTheoryDetailsCache();
 });
 
@@ -248,7 +268,7 @@ test("loader không cache response 200 bị sai envelope hoặc JSON hỏng", as
     );
   };
   await assert.rejects(
-    () => loadLessonTheoryDetails(lessonId, { fetchImplementation: malformedEnvelope }),
+    () => loadLessonDetails(lessonId, { fetchImplementation: malformedEnvelope }),
     /không đúng định dạng/,
   );
   assert.equal(cachedLessonTheoryDetails(lessonId), null);
@@ -260,7 +280,7 @@ test("loader không cache response 200 bị sai envelope hoặc JSON hỏng", as
     });
   };
   await assert.rejects(() =>
-    loadLessonTheoryDetails(lessonId, { fetchImplementation: malformedJson }),
+    loadLessonDetails(lessonId, { fetchImplementation: malformedJson }),
   );
   assert.equal(calls, 2, "lỗi trước đã bị cache thay vì retry fetch");
   assert.equal(cachedLessonTheoryDetails(lessonId), null);

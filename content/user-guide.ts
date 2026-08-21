@@ -325,6 +325,7 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
           "Phiên đã tích hoàn thành ở Lộ trình.",
           "**Bản nháp phiếu đánh giá** — đổi phiên hay tải lại trang đều không mất.",
           "**Code bạn viết trong Code Arena** — lưu riêng cho từng bài, còn nguyên sau khi tải lại trang.",
+          "**Đáp án luyện 350 câu và trạng thái đã đối chiếu** — còn nguyên sau khi tải lại trang.",
           "Lịch sử tự chấm, chủ đề Toán đã đánh dấu, và bài thi thử đang làm dở (giữ cả đồng hồ).",
         ],
       },
@@ -339,7 +340,7 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
       {
         kind: "list",
         items: [
-          "Đổi máy hoặc đổi trình duyệt = **không thấy tiến độ cũ** (dữ liệu không theo bạn sang máy khác).",
+          "Đổi máy hoặc đổi trình duyệt = dữ liệu **không tự đồng bộ**; cần nhập các file backup đã xuất từ máy cũ.",
           "Dùng chế độ ẩn danh = mất hết khi đóng cửa sổ.",
           "Xóa dữ liệu duyệt web = mất tiến độ.",
         ],
@@ -349,8 +350,9 @@ export const USER_GUIDE_SECTIONS: readonly GuideSection[] = [
         tone: "warn",
         title: "Cách giữ tiến độ lâu dài",
         value:
-          "Bấm **Xuất tiến độ** ở trang Lộ trình và **Xuất attempts JSON** ở trang Đánh giá theo định kỳ (ví dụ mỗi tuần), " +
-          "rồi lưu tệp đó vào máy hoặc cloud. Đây là cách duy nhất mang dữ liệu sang thiết bị khác.",
+          "Trên máy cũ, bấm **Xuất tiến độ** ở Lộ trình và **Xuất attempts JSON (kèm bản nháp)** ở Đánh giá, rồi lưu cả hai file vào máy hoặc cloud. " +
+          "Trên máy mới, mở từng trang tương ứng và bấm **Nhập & hợp nhất** / **Nhập & hợp nhất JSON**. " +
+          "Dữ liệu nhập được gộp với dữ liệu đang có, không xoá tiến độ hiện tại.",
       },
     ],
   },

@@ -9,11 +9,12 @@
 
 import { THEORY_SOURCE_IDS } from "./types";
 import type { LessonDeepTheory } from "./types";
+import type { LessonPractice } from "../lesson-practice/types";
 
 /** Thư mục chunk tĩnh trong `public/`, tính từ gốc site. */
 export const LESSON_THEORY_CHUNK_DIRECTORY = "/data/lesson-theory";
 /** Tăng số này khi hình dạng chunk thay đổi không tương thích ngược. */
-export const LESSON_THEORY_CHUNK_VERSION = 1;
+export const LESSON_THEORY_CHUNK_VERSION = 2;
 
 /** Runtime enum để client từ chối `sourceIds` lạ thay vì chỉ ép kiểu mù. */
 export const LESSON_THEORY_SOURCE_IDS = THEORY_SOURCE_IDS;
@@ -23,6 +24,7 @@ export interface LessonTheoryChunk {
   version: number;
   lessonId: string;
   theory: LessonDeepTheory;
+  practice: LessonPractice;
 }
 
 /**

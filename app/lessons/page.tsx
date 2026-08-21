@@ -3,6 +3,7 @@ import { LessonsExplorer, type LessonViewModel } from "../../components/LessonsE
 import { getCoreLessonsInRecommendedOrder } from "../../content/lessons-core";
 import { multimodalLessons } from "../../content/lessons-multimodal";
 import { assertLessonTheoryCoverage, getLessonDeepTheory } from "../../content/lesson-theory";
+import { assertLessonPracticeCoverage, getLessonPractice } from "../../content/lesson-practice";
 
 export const metadata: Metadata = {
   title: "78 bài giảng thuật toán — VOAI Lab",
@@ -39,6 +40,8 @@ function modalView(lesson: (typeof multimodalLessons)[number]): LessonViewModel 
 export default function LessonsPage() {
   const lessons=[...getCoreLessonsInRecommendedOrder().map(coreView),...multimodalLessons.map(modalView)];
   assertLessonTheoryCoverage(lessons.map((lesson)=>lesson.id));
+  assertLessonPracticeCoverage(lessons.map((lesson)=>lesson.id));
   const initialTheory=getLessonDeepTheory(lessons[0].id);
-  return <main className="inner-page"><header className="page-hero compact"><p className="eyebrow">CATALOG IOAI 2026</p><h1>{lessons.length} bài giảng.<br/><em>Tự làm phần tạo ra hiểu biết.</em></h1><p>Mỗi bài đi qua trực giác, công thức, trace, độ phức tạp, failure modes, quiz và một dự án thật. Với thuật toán nhỏ, bạn tự cài phần lõi; với model pretrained lớn, bạn tự viết pipeline, evaluation, kiểm tra shape/schema, error analysis và ít nhất một ablation — không phải huấn luyện lại toàn bộ model từ đầu.</p></header><LessonsExplorer lessons={lessons} initialTheory={initialTheory}/></main>;
+  const initialPractice=getLessonPractice(lessons[0].id);
+  if(!initialPractice)throw new Error(`Thiếu nội dung thực hành cho ${lessons[0].id}.`); return <main className="inner-page"><header className="page-hero compact"><p className="eyebrow">CATALOG IOAI 2026</p><h1>{lessons.length} bài giảng.<br/><em>Học từ tình huống thật.</em></h1><p>Mỗi bài bắt đầu bằng một bài toán thực tế, dữ liệu mẫu, code Python chạy được, output để đối chiếu và một minh họa cho phép đổi tham số. Phần lý thuyết, trace, failure modes, quiz và thử thách code vẫn được giữ lại để giải thích vì sao cách làm hoạt động.</p></header><LessonsExplorer lessons={lessons} initialTheory={initialTheory} initialPractice={initialPractice}/></main>;
 }

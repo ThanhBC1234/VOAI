@@ -2,9 +2,33 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EssayCoach } from "./EssayCoach";
-import { describeWriteStatus, readJson, writeJson } from "../lib/local-storage";
-import { useDraftWriter } from "../lib/draft-storage";
+import { describeWriteStatus, readRaw, writeJson } from "../lib/local-storage";
 import { loadAssessmentChunk, type AssessmentDetailMap } from "../lib/assessment-details";
+import {
+  ASSESSMENT_TRANSFER_FORMAT,
+  ASSESSMENT_TRANSFER_VERSION,
+  MAX_ASSESSMENT_IMPORT_BYTES,
+
+  MAX_OPAQUE_STRING_LENGTH,
+  assessmentInteractionLocks,
+  assessmentOpaqueFingerprint,
+  capAssessmentString,
+  inspectAssessmentAttemptsStoreRaw,
+  inspectAssessmentDraftStoreRaw,
+  isAssessmentAttemptsStoreValueSafe,
+  mergeAssessmentAttemptStoreValues,
+  mergeAssessmentDraftStoreDelta,
+  parseAssessmentTransferJson,
+  partitionAssessmentDraftStore,
+  serializeAssessmentTransferPayload,
+  shouldAcceptImportedAssessmentDraft,
+  type AssessmentDraftStoreDelta,
+} from "../lib/assessment-transfer";
+import {
+  describeLearningProgressWriteResult,
+  markSessionCompleted,
+  mergeLearningProgress,
+} from "../lib/learning-progress";
 import type {
   AssessmentCatalogEntry,
   AssessmentDetail,
@@ -63,6 +87,15 @@ type Props = {
 const STORAGE_KEY = "voai-assessment-attempts-v1";
 /** Bản nháp đang gõ, tách khỏi lịch sử attempt và có version riêng (ASSESS-P2-01). */
 const DRAFTS_STORAGE_KEY = "voai-assessment-drafts-v1";
+const ASSESSMENT_DRAFT_FLUSH_DELAY_MS = 600;
+const DRAFT_WRITE_LIMIT_MESSAGE =
+  "Bản nháp chưa được lưu: kho đã đạt giới hạn an toàn 1.000 draft, 5 MiB hoặc 120.000 node. Dữ liệu local cũ vẫn nguyên.";
+const DRAFT_LIVE_INVALID_MESSAGE =
+  "Kho bản nháp vừa thay đổi ở tab khác nhưng không còn hydrate an toàn. Trang đã khóa ghi và giữ nguyên dữ liệu local.";
+const ATTEMPT_LIVE_INVALID_MESSAGE =
+  "Kho attempt vừa thay đổi ở tab khác nhưng không còn hydrate an toàn. Trang đã khóa ghi và giữ nguyên dữ liệu local.";
+const CROSS_TAB_DRAFT_WARNING =
+  "Bản nháp của phiên này vừa thay đổi ở tab khác. Nội dung của tab lưu sau cùng sẽ được giữ.";
 const kindLabels: Record<AssessmentCatalogEntry["kind"], string> = {
   lesson: "Bài học",
   lab: "Lab",
@@ -254,6 +287,179 @@ function isStoredAttempt(
   );
 }
 
+/**
+ * Draft nhập từ file không được ép kiểu thẳng. Mọi trường đều được kiểm tra
+ * theo assessment tương ứng, rồi component chỉ sao chép các trường đã biết.
+ */
+function parseAssessmentDraft(
+  value: unknown,
+  entry: AssessmentCatalogEntry,
+): AssessmentDraft | null {
+  if (!isRecord(value)) return null;
+  if (
+    !Array.isArray(value.retrievalAnswers) ||
+    value.retrievalAnswers.length !== entry.retrievalCount ||
+    !value.retrievalAnswers.every((answer) => typeof answer === "string") ||
+    typeof value.codeEvidence !== "string" ||
+    typeof value.evidenceLink !== "string" ||
+    typeof value.explanation !== "string" ||
+    typeof value.soloConfirmed !== "boolean" ||
+    typeof value.noAutomaticFailConfirmed !== "boolean"
+  ) {
+    return null;
+  }
+  const rawScores = value.scores;
+  if (
+    !isRecord(rawScores) ||
+    Object.keys(rawScores).length !== scoreCategories.length ||
+    !scoreCategories.every((category) => {
+      const score = rawScores[category];
+      return (
+        typeof score === "number" &&
+        Number.isFinite(score) &&
+        score >= 0 &&
+        score <= entry.scoreWeights[category]
+      );
+    })
+  ) {
+    return null;
+  }
+
+  return {
+    retrievalAnswers: [...value.retrievalAnswers],
+    codeEvidence: value.codeEvidence,
+    evidenceLink: value.evidenceLink,
+    explanation: value.explanation,
+    scores: {
+      retrieval: rawScores.retrieval as number,
+      coding: rawScores.coding as number,
+      validation: rawScores.validation as number,
+      explanation: rawScores.explanation as number,
+    },
+    soloConfirmed: value.soloConfirmed,
+    noAutomaticFailConfirmed: value.noAutomaticFailConfirmed,
+  };
+}
+
+function createUnknownRecord(): Record<string, unknown> {
+  return Object.create(null) as Record<string, unknown>;
+}
+
+function assessmentAttemptIdentity(
+  value: unknown,
+  entryById: ReadonlyMap<string, AssessmentCatalogEntry>,
+): string | null {
+  if (isStoredAttempt(value, entryById)) return `known:${value.id}`;
+  const fingerprint = assessmentOpaqueFingerprint(value);
+  return fingerprint === null ? null : `opaque:${fingerprint}`;
+}
+
+function partitionAssessmentAttempts(
+  candidates: readonly unknown[],
+  entryById: ReadonlyMap<string, AssessmentCatalogEntry>,
+): { known: StoredAttempt[]; opaque: unknown[] } {
+  const known: StoredAttempt[] = [];
+  const opaque: unknown[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const identity = assessmentAttemptIdentity(candidate, entryById);
+    if (identity === null || seen.has(identity)) continue;
+    seen.add(identity);
+    if (isStoredAttempt(candidate, entryById)) known.push(candidate);
+    else opaque.push(candidate);
+  }
+  known.sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp));
+  return { known, opaque };
+}
+
+interface AssessmentDraftDeltaWriterCore {
+  schedule: (delta: AssessmentDraftStoreDelta) => void;
+  flush: () => void;
+  dispose: () => void;
+  pendingSession: () => string | null;
+}
+
+function createAssessmentDraftDeltaWriterCore(
+  onWrite: (delta: AssessmentDraftStoreDelta) => void,
+): AssessmentDraftDeltaWriterCore {
+  let pending: AssessmentDraftStoreDelta | null = null;
+  let timer: number | null = null;
+  const cancelTimer = () => {
+    if (timer !== null) {
+      globalThis.clearTimeout(timer);
+      timer = null;
+    }
+  };
+  const flush = () => {
+    cancelTimer();
+    if (!pending) return;
+    const delta = pending;
+    pending = null;
+    onWrite(delta);
+  };
+  return {
+    schedule(delta) {
+      pending = delta;
+      cancelTimer();
+      timer = globalThis.setTimeout(
+        flush,
+        ASSESSMENT_DRAFT_FLUSH_DELAY_MS,
+      ) as unknown as number;
+    },
+    flush,
+    dispose() {
+      cancelTimer();
+      pending = null;
+    },
+    pendingSession: () => pending?.sessionId ?? null,
+  };
+}
+
+function useAssessmentDraftDeltaWriter(
+  persist: (delta: AssessmentDraftStoreDelta) => string | null,
+): {
+  schedule: (delta: AssessmentDraftStoreDelta) => void;
+  flush: () => void;
+  notice: string | null;
+  pendingSession: () => string | null;
+} {
+  const [notice, setNotice] = useState<string | null>(null);
+  const [core] = useState(() =>
+    createAssessmentDraftDeltaWriterCore((delta) => setNotice(persist(delta))),
+  );
+  useEffect(() => {
+    const flushNow = () => core.flush();
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") core.flush();
+    };
+    window.addEventListener("pagehide", flushNow);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+      core.flush();
+      core.dispose();
+    };
+  }, [core]);
+  return useMemo(
+    () => ({
+      schedule: core.schedule,
+      flush: core.flush,
+      notice,
+      pendingSession: core.pendingSession,
+    }),
+    [core, notice],
+  );
+}
+
+function progressSyncWarning(status: ReturnType<typeof markSessionCompleted>["status"]): string {
+  const reason = describeWriteStatus(status);
+  return (
+    " Cảnh báo: attempt đã được lưu nhưng chưa đồng bộ sang tiến độ Lộ trình." +
+    (reason ? ` ${reason}` : "")
+  );
+}
+
 function statusLabel(status: AttemptStatus): string {
   if (status === "passed") return "Pass tự đánh giá";
   if (status === "needs-revision") return "Cần sửa";
@@ -283,6 +489,14 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
         },
   );
   const [saveMessage, setSaveMessage] = useState("");
+  const [transferMessage, setTransferMessage] = useState("");
+  const [attemptStoreLocked, setAttemptStoreLocked] = useState(false);
+  const [draftStoreLocked, setDraftStoreLocked] = useState(false);
+  const [attemptStoreReady, setAttemptStoreReady] = useState(false);
+  const [draftStoreReady, setDraftStoreReady] = useState(false);
+  const [draftPayloadBlocked, setDraftPayloadBlocked] = useState(false);
+  const [draftWriteLimitMessage, setDraftWriteLimitMessage] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
   /**
    * Chi tiết đã có trên client. Bài đầu tiên nằm sẵn trong payload đầu nên
    * màn hình đầu không phải chờ mạng; các tuần khác được nạp vào đây theo chunk.
@@ -294,25 +508,41 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
   const [retryToken, setRetryToken] = useState(0);
   /** Kho bản nháp theo sessionId; tồn tại qua cả việc chuyển bài lẫn reload. */
   const draftsRef = useRef<Record<string, AssessmentDraft>>({});
-  const {
-    schedule: scheduleDraftWrite,
-    flush: flushDraftWrite,
-    notice: draftNotice,
-  } = useDraftWriter(DRAFTS_STORAGE_KEY);
+  const draftPayloadBlockedRef = useRef(false);
   /**
    * Chặn ghi trước khi đọc xong. Lần render đầu `draft` mới chỉ là biểu mẫu
    * rỗng; nếu bộ theo dõi bên dưới ghi ngay giá trị đó thì nó sẽ **đè mất** bản
    * nháp đang nằm trong storage trước khi kịp khôi phục.
    */
   const hydratedRef = useRef(false);
+  /** Chỉ bật sau khi xác nhận kho tương ứng đang thiếu hoặc hydrate hợp lệ. */
+  const attemptWritesAllowedRef = useRef(false);
+  const draftWritesAllowedRef = useRef(false);
+  /** Snapshot đồng bộ để import async không dùng closure attempts đã cũ. */
+  const attemptsRef = useRef<StoredAttempt[]>([]);
   /** Attempt cũ chưa diễn giải được bằng rubric hiện tại; luôn được ghi lại kèm. */
   const unreadableRef = useRef<unknown[]>([]);
+  /** Draft thuộc assessment đã rời catalog; chỉ lưu/tái xuất, không đưa vào form. */
+  const opaqueDraftsRef = useRef<Record<string, unknown>>(createUnknownRecord());
+  const importInputRef = useRef<HTMLInputElement>(null);
+  /** Khóa đồng bộ ngay trước await; state chỉ phục vụ render/disable UI. */
+  const importInFlightRef = useRef(false);
   /** Chunk đã ghép vào `details`; chặn cả tải trùng lẫn vòng lặp effect. */
   const mergedChunksRef = useRef<Set<string>>(new Set());
   const entryById = useMemo(
     () => new Map(catalog.map((entry) => [entry.id, entry])),
     [catalog],
   );
+  const entryBySession = useMemo(
+    () => new Map(catalog.map((entry) => [entry.sessionId, entry])),
+    [catalog],
+  );
+  const {
+    schedule: scheduleDraftWrite,
+    flush: flushDraftWrite,
+    notice: draftNotice,
+    pendingSession: pendingDraftSession,
+  } = useAssessmentDraftDeltaWriter(persistDraftDelta);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -320,27 +550,72 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
       const requestedAssessment = catalog.find(
         (entry) => entry.sessionId === requestedSession,
       );
-      // Khôi phục kho nháp trước, để deep link không ghi đè bản đang gõ dở.
-      const stored = readJson<Record<string, AssessmentDraft>>(
-        DRAFTS_STORAGE_KEY,
-        (value) => {
-          if (typeof value !== "object" || value === null) return null;
-          const record = value as { version?: unknown; drafts?: unknown };
-          if (record.version !== 1) return null;
-          if (typeof record.drafts !== "object" || record.drafts === null) return null;
-          return record.drafts as Record<string, AssessmentDraft>;
-        },
-        {},
-      );
-      draftsRef.current = stored;
-      hydratedRef.current = true;
       const target = requestedAssessment ?? initialAssessment;
+      const inspection = inspectAssessmentDraftStoreRaw(readRaw(DRAFTS_STORAGE_KEY));
+
+      if (inspection.status === "invalid") {
+        // Không diễn giải được không đồng nghĩa với rỗng: khóa ghi để dữ liệu
+        // nguyên bản trong localStorage tuyệt đối không bị form mới đè lên.
+        draftWritesAllowedRef.current = false;
+        hydratedRef.current = false;
+        draftsRef.current = Object.create(null) as Record<string, AssessmentDraft>;
+        opaqueDraftsRef.current = createUnknownRecord();
+        setDraftStoreLocked(true);
+        setDraftStoreReady(false);
+        draftPayloadBlockedRef.current = true;
+        setDraftPayloadBlocked(true);
+        if (target) {
+          setSelectedId(target.sessionId);
+          setDraft(emptyDraft(target));
+        }
+        return;
+      }
+
+      const stored =
+        inspection.status === "valid" ? inspection.value : createUnknownRecord();
+      const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+        stored,
+        (sessionId, candidate) => {
+          const entry = entryBySession.get(sessionId);
+          if (!entry) return { kind: "unknown" };
+          const validDraft = parseAssessmentDraft(candidate, entry);
+          return validDraft
+            ? { kind: "known", value: validDraft }
+            : { kind: "invalid" };
+        },
+      );
+      if (partition.status === "invalid-known") {
+        // Draft của session hiện hành sai schema vẫn là dữ liệu người học. Khóa
+        // toàn bộ kho, không thay nó bằng form rỗng rồi autosave đè lên.
+        draftWritesAllowedRef.current = false;
+        hydratedRef.current = false;
+        draftsRef.current = Object.create(null) as Record<string, AssessmentDraft>;
+        opaqueDraftsRef.current = createUnknownRecord();
+        setDraftStoreLocked(true);
+        setDraftStoreReady(false);
+        draftPayloadBlockedRef.current = true;
+        setDraftPayloadBlocked(true);
+        if (target) {
+          setSelectedId(target.sessionId);
+          setDraft(emptyDraft(target));
+        }
+        return;
+      }
+      draftsRef.current = partition.known;
+      opaqueDraftsRef.current = partition.opaque;
+      draftWritesAllowedRef.current = true;
+      hydratedRef.current = true;
+      setDraftStoreLocked(false);
+      setDraftStoreReady(true);
+      draftPayloadBlockedRef.current = false;
+      setDraftPayloadBlocked(false);
+      setDraftWriteLimitMessage("");
       if (!target) return;
       setSelectedId(target.sessionId);
       setDraft(draftsRef.current[target.sessionId] ?? emptyDraft(target));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [catalog, initialAssessment]);
+  }, [catalog, entryBySession, initialAssessment]);
 
   /**
    * Lưu bản nháp **trong lúc gõ** (ASSESS-P1-01).
@@ -350,35 +625,67 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
    * phủ được **mọi** đường sửa — kể cả những ô nhập thêm về sau — thay vì phải
    * nhớ gọi thủ công trong từng hàm `update*`.
    */
-  useEffect(() => {
-    if (!hydratedRef.current || !selectedId) return;
-    draftsRef.current = { ...draftsRef.current, [selectedId]: draft };
-    scheduleDraftWrite({ version: 1, drafts: draftsRef.current });
-  }, [draft, selectedId, scheduleDraftWrite]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      // ASSESS-P2-02: chỉ *đọc* ở đây. Bản ghi không nhận diện được (ví dụ vì
-      // rubric đã đổi giữa hai lần phát hành) được giữ nguyên trong storage và
-      // cất vào `unreadableRef`, thay vì bị lọc rồi ghi đè mất vĩnh viễn.
-      const candidates = readJson<unknown[]>(
-        STORAGE_KEY,
-        (value) => (Array.isArray(value) ? value : null),
-        [],
-      );
+      // Kho tồn tại nhưng hỏng/quá giới hạn phải được giữ nguyên byte-for-byte;
+      // tuyệt đối không biến nó thành [] rồi ghi đè ở lần lưu kế tiếp.
+      const inspection = inspectAssessmentAttemptsStoreRaw(readRaw(STORAGE_KEY));
+      if (inspection.status === "invalid") {
+        attemptWritesAllowedRef.current = false;
+        attemptsRef.current = [];
+        unreadableRef.current = [];
+        setAttempts([]);
+        setAttemptStoreLocked(true);
+        setAttemptStoreReady(false);
+        return;
+      }
+
+      const candidates = inspection.status === "valid" ? inspection.value : [];
       const seenAttemptIds = new Set<string>();
+      const seenOpaque = new Set<string>();
       const validAttempts: StoredAttempt[] = [];
       const unreadable: unknown[] = [];
       for (const candidate of candidates) {
-        if (isStoredAttempt(candidate, entryById) && !seenAttemptIds.has(candidate.id)) {
+        if (isStoredAttempt(candidate, entryById)) {
+          if (seenAttemptIds.has(candidate.id)) continue;
           seenAttemptIds.add(candidate.id);
           validAttempts.push(candidate);
-        } else {
-          unreadable.push(candidate);
+          continue;
+        }
+        const fingerprint = assessmentOpaqueFingerprint(candidate);
+        if (fingerprint === null || seenOpaque.has(fingerprint)) continue;
+        seenOpaque.add(fingerprint);
+        unreadable.push(candidate);
+      }
+      attemptsRef.current = validAttempts;
+      unreadableRef.current = unreadable;
+      attemptWritesAllowedRef.current = true;
+      setAttempts(validAttempts);
+      setAttemptStoreLocked(false);
+      setAttemptStoreReady(true);
+
+      // PROGRESS-MIGRATION-ASSESSMENT-START
+      // Chỉ attempt đã qua `isStoredAttempt` mới được phép nối sang tiến độ.
+      // Đây là kho canonical riêng, không nới khóa ghi của Assessment.
+      const passedSessionIds = [
+        ...new Set(
+          validAttempts
+            .filter((attempt) => attempt.status === "passed")
+            .map((attempt) => attempt.sessionId),
+        ),
+      ];
+      if (passedSessionIds.length > 0) {
+        const progressResult = mergeLearningProgress(passedSessionIds);
+        if (progressResult.status !== "ok") {
+          const reason = describeLearningProgressWriteResult(progressResult);
+          setTransferMessage(
+            "Cảnh báo: các attempt pass cũ vẫn được giữ nguyên, nhưng chưa đồng bộ sang tiến độ Lộ trình." +
+              (reason ? ` ${reason}` : ""),
+          );
         }
       }
-      unreadableRef.current = unreadable;
-      setAttempts(validAttempts);
+      // PROGRESS-MIGRATION-ASSESSMENT-END
     }, 0);
     return () => window.clearTimeout(timer);
   }, [entryById]);
@@ -401,6 +708,112 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
    * chọn vẫn thiếu chi tiết (dữ liệu lệch giữa catalog và chunk), effect phải
    * dừng và báo lỗi thay vì gọi lại `setDetails` vô hạn.
    */
+  useEffect(() => {
+    const syncFromStorage = (event: StorageEvent) => {
+      const lockLiveDrafts = () => {
+        draftWritesAllowedRef.current = false;
+        hydratedRef.current = false;
+        setDraftStoreLocked(true);
+        setDraftStoreReady(false);
+        draftPayloadBlockedRef.current = true;
+        setDraftPayloadBlocked(true);
+        setDraftWriteLimitMessage(DRAFT_LIVE_INVALID_MESSAGE);
+      };
+      if (event.key === STORAGE_KEY) {
+        const inspection = inspectAssessmentAttemptsStoreRaw(event.newValue);
+        if (inspection.status === "invalid") {
+          attemptWritesAllowedRef.current = false;
+          setAttemptStoreLocked(true);
+          setAttemptStoreReady(false);
+          setTransferMessage(ATTEMPT_LIVE_INVALID_MESSAGE);
+          return;
+        }
+        const candidates = inspection.status === "valid" ? inspection.value : [];
+        const partition = partitionAssessmentAttempts(candidates, entryById);
+        attemptsRef.current = partition.known;
+        unreadableRef.current = partition.opaque;
+        attemptWritesAllowedRef.current = true;
+        setAttempts(partition.known);
+        setAttemptStoreLocked(false);
+        setAttemptStoreReady(true);
+        return;
+      }
+      if (event.key !== DRAFTS_STORAGE_KEY) return;
+
+      const inspection = inspectAssessmentDraftStoreRaw(event.newValue);
+      if (inspection.status === "invalid") {
+        lockLiveDrafts();
+        return;
+      }
+      const liveDrafts =
+        inspection.status === "valid" ? inspection.value : createUnknownRecord();
+      const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+        liveDrafts,
+        (sessionId, candidate) => {
+          const entry = entryBySession.get(sessionId);
+          if (!entry) return { kind: "unknown" };
+          const validDraft = parseAssessmentDraft(candidate, entry);
+          return validDraft
+            ? { kind: "known", value: validDraft }
+            : { kind: "invalid" };
+        },
+      );
+      if (partition.status === "invalid-known") {
+        lockLiveDrafts();
+        return;
+      }
+
+      const previousSelected = draftsRef.current[selectedId];
+      const nextSelected = partition.known[selectedId];
+      const selectedChanged =
+        assessmentOpaqueFingerprint(previousSelected) !==
+        assessmentOpaqueFingerprint(nextSelected);
+      draftsRef.current = partition.known;
+      opaqueDraftsRef.current = partition.opaque;
+      draftWritesAllowedRef.current = true;
+      hydratedRef.current = true;
+      setDraftStoreLocked(false);
+      setDraftStoreReady(true);
+
+      const hasPendingSelected = pendingDraftSession() === selectedId;
+      if (draftPayloadBlockedRef.current && selected) {
+        const retryPayload = mergeAssessmentDraftStoreDelta(liveDrafts, {
+          sessionId: selectedId,
+          kind: "replace",
+          value: draft,
+        });
+        if (retryPayload) {
+          draftPayloadBlockedRef.current = false;
+          setDraftPayloadBlocked(false);
+          setDraftWriteLimitMessage("");
+          scheduleDraftWrite({
+            sessionId: selectedId,
+            kind: "replace",
+            value: draft,
+          });
+          return;
+        }
+      }
+      if (hasPendingSelected) {
+        if (selectedChanged) setDraftWriteLimitMessage(CROSS_TAB_DRAFT_WARNING);
+        return;
+      }
+      draftPayloadBlockedRef.current = false;
+      setDraftPayloadBlocked(false);
+      setDraftWriteLimitMessage("");
+      if (selected) setDraft(nextSelected ?? emptyDraft(selected));
+    };
+    window.addEventListener("storage", syncFromStorage);
+    return () => window.removeEventListener("storage", syncFromStorage);
+  }, [
+    draft,
+    entryById,
+    entryBySession,
+    pendingDraftSession,
+    scheduleDraftWrite,
+    selected,
+    selectedId,
+  ]);
   useEffect(() => {
     if (!selectedChunk || !selectedId || details[selectedId]) return;
     // Chunk đã ghép mà vẫn thiếu bài đang chọn nghĩa là dữ liệu lệch, không phải
@@ -467,21 +880,143 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
   const passedSessions = new Set(
     attempts.filter((attempt) => attempt.status === "passed").map((attempt) => attempt.sessionId),
   ).size;
+  const interactionLocks = assessmentInteractionLocks(
+    isImporting,
+    attemptStoreReady,
+    draftStoreReady && !draftPayloadBlocked,
+  );
 
   if (!selected) {
     return <p className="empty-state">Không có assessment để hiển thị.</p>;
   }
 
-  /**
-   * Chuyển assessment **không** được xoá bản nháp đang gõ. Nháp của bài hiện tại
-   * được cất vào kho theo sessionId, rồi nạp lại nháp của bài đích nếu có.
-   */
+  function setDraftBlocked(blocked: boolean, message = "") {
+    draftPayloadBlockedRef.current = blocked;
+    setDraftPayloadBlocked(blocked);
+    setDraftWriteLimitMessage(message);
+  }
+
+  function lockDraftStore(message: string) {
+    draftWritesAllowedRef.current = false;
+    hydratedRef.current = false;
+    setDraftStoreLocked(true);
+    setDraftStoreReady(false);
+    setDraftBlocked(true, message);
+  }
+
+  function readLiveDraftSnapshot(): {
+    drafts: Readonly<Record<string, unknown>>;
+    known: Record<string, AssessmentDraft>;
+    opaque: Record<string, unknown>;
+  } | null {
+    const inspection = inspectAssessmentDraftStoreRaw(readRaw(DRAFTS_STORAGE_KEY));
+    if (inspection.status === "invalid") {
+      lockDraftStore(DRAFT_LIVE_INVALID_MESSAGE);
+      return null;
+    }
+    const drafts = inspection.status === "valid" ? inspection.value : createUnknownRecord();
+    const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+      drafts,
+      (sessionId, candidate) => {
+        const entry = entryBySession.get(sessionId);
+        if (!entry) return { kind: "unknown" };
+        const validDraft = parseAssessmentDraft(candidate, entry);
+        return validDraft ? { kind: "known", value: validDraft } : { kind: "invalid" };
+      },
+    );
+    if (partition.status === "invalid-known") {
+      lockDraftStore(DRAFT_LIVE_INVALID_MESSAGE);
+      return null;
+    }
+    draftWritesAllowedRef.current = true;
+    hydratedRef.current = true;
+    setDraftStoreLocked(false);
+    setDraftStoreReady(true);
+    draftsRef.current = partition.known;
+    opaqueDraftsRef.current = partition.opaque;
+    return { drafts, known: partition.known, opaque: partition.opaque };
+  }
+
+  function persistDraftDelta(delta: AssessmentDraftStoreDelta): string | null {
+    const live = readLiveDraftSnapshot();
+    if (!live) return DRAFT_LIVE_INVALID_MESSAGE;
+    const payload = mergeAssessmentDraftStoreDelta(live.drafts, delta);
+    if (!payload) {
+      setDraftBlocked(true, DRAFT_WRITE_LIMIT_MESSAGE);
+      return DRAFT_WRITE_LIMIT_MESSAGE;
+    }
+    const status = writeJson(DRAFTS_STORAGE_KEY, payload);
+    if (status !== "ok") {
+      const message = describeWriteStatus(status) ?? "Không lưu được bản nháp.";
+      setDraftBlocked(true, message);
+      return message;
+    }
+    const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+      payload.drafts,
+      (sessionId, candidate) => {
+        const entry = entryBySession.get(sessionId);
+        if (!entry) return { kind: "unknown" };
+        const validDraft = parseAssessmentDraft(candidate, entry);
+        return validDraft ? { kind: "known", value: validDraft } : { kind: "invalid" };
+      },
+    );
+    if (partition.status === "invalid-known") {
+      lockDraftStore(DRAFT_LIVE_INVALID_MESSAGE);
+      return DRAFT_LIVE_INVALID_MESSAGE;
+    }
+    draftsRef.current = partition.known;
+    opaqueDraftsRef.current = partition.opaque;
+    setDraftBlocked(false);
+    return null;
+  }
+
+  function applyDraftUpdate(nextDraft: AssessmentDraft) {
+    setDraft(nextDraft);
+    if (importInFlightRef.current || !selectedId) return;
+    const live = readLiveDraftSnapshot();
+    if (!live) return;
+    const delta: AssessmentDraftStoreDelta = {
+      sessionId: selectedId,
+      kind: "replace",
+      value: nextDraft,
+    };
+    const payload = mergeAssessmentDraftStoreDelta(live.drafts, delta);
+    if (!payload) {
+      setDraftBlocked(true, DRAFT_WRITE_LIMIT_MESSAGE);
+      return;
+    }
+    const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+      payload.drafts,
+      (sessionId, candidate) => {
+        const entry = entryBySession.get(sessionId);
+        if (!entry) return { kind: "unknown" };
+        const validDraft = parseAssessmentDraft(candidate, entry);
+        return validDraft ? { kind: "known", value: validDraft } : { kind: "invalid" };
+      },
+    );
+    if (partition.status === "invalid-known") {
+      lockDraftStore(DRAFT_LIVE_INVALID_MESSAGE);
+      return;
+    }
+    draftsRef.current = partition.known;
+    opaqueDraftsRef.current = partition.opaque;
+    setDraftBlocked(false);
+    scheduleDraftWrite(delta);
+  }
+
+  /** Chuyển bài chỉ sau khi delta đang chờ đã được ghép vào snapshot live. */
   function chooseAssessment(entry: AssessmentCatalogEntry) {
-    draftsRef.current = { ...draftsRef.current, [selectedId]: draft };
-    scheduleDraftWrite({ version: 1, drafts: draftsRef.current });
+    if (importInFlightRef.current) return;
     flushDraftWrite();
+    if (draftPayloadBlockedRef.current) {
+      setSaveMessage(
+        "Không thể đổi phiên vì bản nháp hiện tại chưa lưu an toàn. Hãy thu gọn nội dung hoặc nộp attempt trước.",
+      );
+      return;
+    }
+    const live = readLiveDraftSnapshot();
     setSelectedId(entry.sessionId);
-    setDraft(draftsRef.current[entry.sessionId] ?? emptyDraft(entry));
+    setDraft(live?.known[entry.sessionId] ?? emptyDraft(entry));
     setSaveMessage("");
     const url = new URL(window.location.href);
     url.searchParams.set("session", entry.sessionId);
@@ -489,11 +1024,9 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
   }
 
   function updateRetrieval(index: number, value: string) {
-    setDraft((current) => {
-      const retrievalAnswers = [...current.retrievalAnswers];
-      retrievalAnswers[index] = value;
-      return { ...current, retrievalAnswers };
-    });
+    const retrievalAnswers = [...draft.retrievalAnswers];
+    retrievalAnswers[index] = capAssessmentString(value);
+    applyDraftUpdate({ ...draft, retrievalAnswers });
   }
 
   function updateScore(
@@ -505,29 +1038,63 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
     const score = Number.isFinite(numeric)
       ? Math.min(maximum, Math.max(0, numeric))
       : 0;
-    setDraft((current) => ({
-      ...current,
-      scores: { ...current.scores, [category]: score },
-    }));
+    applyDraftUpdate({
+      ...draft,
+      scores: { ...draft.scores, [category]: score },
+    });
+  }
+
+  function lockAttemptStore(message: string) {
+    attemptWritesAllowedRef.current = false;
+    setAttemptStoreLocked(true);
+    setAttemptStoreReady(false);
+    setTransferMessage(message);
+  }
+
+  function readLiveAttemptSnapshot(): readonly unknown[] | null {
+    const inspection = inspectAssessmentAttemptsStoreRaw(readRaw(STORAGE_KEY));
+    if (inspection.status === "invalid") {
+      lockAttemptStore(ATTEMPT_LIVE_INVALID_MESSAGE);
+      return null;
+    }
+    const candidates = inspection.status === "valid" ? inspection.value : [];
+    const partition = partitionAssessmentAttempts(candidates, entryById);
+    attemptsRef.current = partition.known;
+    unreadableRef.current = partition.opaque;
+    attemptWritesAllowedRef.current = true;
+    setAttempts(partition.known);
+    setAttemptStoreLocked(false);
+    setAttemptStoreReady(true);
+    return candidates;
   }
 
   function saveAttempt(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (importInFlightRef.current) {
+      setSaveMessage("Đang nhập backup; hãy đợi hợp nhất xong rồi lưu attempt.");
+      return;
+    }
+    const liveAttempts = readLiveAttemptSnapshot();
+    if (!liveAttempts) {
+      setSaveMessage(
+        "Không lưu attempt: kho lịch sử live không hydrate an toàn nên trang đã khóa ghi để tránh mất dữ liệu.",
+      );
+      return;
+    }
+
     const timestamp = new Date().toISOString();
     const attempt: StoredAttempt = {
       ...draft,
       id:
         typeof crypto !== "undefined" && "randomUUID" in crypto
           ? crypto.randomUUID()
-          : `${selected.sessionId}-${timestamp}-${attempts.length}`,
+          : `${selected.sessionId}-${timestamp}-${liveAttempts.length}`,
       assessmentId: selected.id,
       sessionId: selected.sessionId,
       timestamp,
       score: totalScore,
       threshold: selected.minimumScore,
       status: projectedStatus,
-      // Snapshot bất biến của rubric tại thời điểm nộp: lịch sử không bao giờ
-      // bị diễn giải lại bằng rubric của một phiên bản nội dung khác.
       rubricSnapshot: {
         version: 1,
         weights: { ...selected.scoreWeights },
@@ -535,53 +1102,351 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
         minimumSectionScores: { ...selected.minimumSectionScores },
       },
     };
-    const nextAttempts = [attempt, ...attempts];
-    // Ghi kèm cả bản ghi chưa đọc được để không xoá lịch sử của người học.
-    const status = writeJson(STORAGE_KEY, [...nextAttempts, ...unreadableRef.current]);
-    if (status === "ok") {
-      setAttempts(nextAttempts);
+    const merged = mergeAssessmentAttemptStoreValues(
+      liveAttempts,
+      [attempt],
+      (candidate) => assessmentAttemptIdentity(candidate, entryById),
+    );
+    if (!merged) {
       setSaveMessage(
-        projectedStatus === "passed"
-          ? `Đã lưu pass tự đánh giá lúc ${new Date(timestamp).toLocaleString("vi-VN")}.`
-          : `Đã lưu attempt ở trạng thái “${statusLabel(projectedStatus)}”.`,
+        "Không thể lưu thêm: kho Assessment sẽ vượt giới hạn 10.000 attempt, 5 MiB hoặc 120.000 node. Dữ liệu live vẫn nguyên.",
       );
-      // Nộp xong thì bản nháp của bài này không còn cần giữ.
-      const remaining = { ...draftsRef.current };
-      delete remaining[selected.sessionId];
-      draftsRef.current = remaining;
-      // Đi qua cùng một ô chờ với lúc gõ: nếu ghi thẳng ở đây, một lần ghi đã
-      // hẹn giờ từ trước còn treo sẽ chạy sau và **làm sống lại** bản nháp vừa xoá.
-      scheduleDraftWrite({ version: 1, drafts: remaining });
-      flushDraftWrite();
-    } else {
+      return;
+    }
+    if (merged.added.length === 0) {
+      setSaveMessage("Attempt này đã tồn tại trong kho live nên không ghi hoặc cộng tiến độ lần nữa.");
+      return;
+    }
+
+    const partition = partitionAssessmentAttempts(merged.value, entryById);
+    const persistedPayload = [...partition.known, ...partition.opaque];
+    if (!isAssessmentAttemptsStoreValueSafe(persistedPayload)) {
+      setSaveMessage("Không lưu attempt: payload sau hợp nhất không còn nằm trong giới hạn an toàn.");
+      return;
+    }
+    const status = writeJson(STORAGE_KEY, persistedPayload);
+    if (status !== "ok") {
       setSaveMessage(
         describeWriteStatus(status) ?? "Không thể ghi attempt vào bộ nhớ trình duyệt này.",
       );
+      return;
     }
-  }
 
+    attemptsRef.current = partition.known;
+    unreadableRef.current = partition.opaque;
+    setAttempts(partition.known);
+    let message =
+      projectedStatus === "passed"
+        ? `Đã lưu pass tự đánh giá lúc ${new Date(timestamp).toLocaleString("vi-VN")}.`
+        : `Đã lưu attempt ở trạng thái “${statusLabel(projectedStatus)}”.`;
+    if (attempt.status === "passed") {
+      const progressResult = markSessionCompleted(attempt.sessionId);
+      if (progressResult.status !== "ok") message += progressSyncWarning(progressResult.status);
+    }
+
+    if (draftWritesAllowedRef.current) {
+      scheduleDraftWrite({ sessionId: selected.sessionId, kind: "remove" });
+      flushDraftWrite();
+      if (draftPayloadBlockedRef.current) {
+        message += " Cảnh báo: attempt đã lưu nhưng bản nháp chưa được xóa an toàn.";
+      }
+    }
+    setSaveMessage(message);
+  }
   function exportAttempts() {
+    if (importInFlightRef.current) return;
+    flushDraftWrite();
+    if (draftPayloadBlockedRef.current) {
+      setTransferMessage(
+        "Không thể xuất backup chuẩn vì có bản nháp chưa lưu an toàn. Dữ liệu local cũ vẫn nguyên.",
+      );
+      return;
+    }
+    const liveAttempts = readLiveAttemptSnapshot();
+    const liveDrafts = readLiveDraftSnapshot();
+    if (!liveAttempts || !liveDrafts) {
+      setTransferMessage(
+        "Không thể xuất backup chuẩn: một kho local live không hydrate an toàn. Dữ liệu local cũ vẫn còn nguyên và chưa bị ghi đè.",
+      );
+      return;
+    }
     const payload = {
-      format: "voai-assessment-attempts",
-      version: 1,
+      format: ASSESSMENT_TRANSFER_FORMAT,
+      version: ASSESSMENT_TRANSFER_VERSION,
       exportedAt: new Date().toISOString(),
       note: "Bằng chứng formative/manual; trạng thái pass tự chấm không tự động chứng minh tính đúng của code.",
-      attempts,
+      attempts: liveAttempts,
+      drafts: liveDrafts.drafts,
     };
+    const serialized = serializeAssessmentTransferPayload(payload);
+    if (!serialized) {
+      setTransferMessage(
+        "Không thể xuất backup chuẩn: dữ liệu live vượt contract nhập lại an toàn. Dữ liệu local vẫn nguyên.",
+      );
+      return;
+    }
     const url = URL.createObjectURL(
-      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
+      new Blob([serialized], { type: "application/json" }),
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = "voai-assessment-attempts.json";
+    link.download = "voai-assessment-backup.json";
     document.body.appendChild(link);
     link.click();
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
   }
+  async function importBackup(event: React.ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file || importInFlightRef.current) return;
+    importInFlightRef.current = true;
+    setIsImporting(true);
+    setTransferMessage("Đang kiểm tra và hợp nhất backup…");
+    flushDraftWrite();
 
+    try {
+      if (draftPayloadBlockedRef.current) {
+        setTransferMessage(
+          "Không thể nhập lúc này vì bản nháp đang gõ chưa lưu an toàn. Dữ liệu local và file backup đều chưa bị thay đổi.",
+        );
+        return;
+      }
+      if (file.size === 0 || file.size > MAX_ASSESSMENT_IMPORT_BYTES) {
+        setTransferMessage(
+          "Không nhập file: backup phải lớn hơn 0 B và nằm trong giới hạn dung lượng Assessment.",
+        );
+        return;
+      }
+      const envelope = parseAssessmentTransferJson(await file.text());
+      if (!envelope) {
+        setTransferMessage("Không nhập file: JSON không đúng định dạng backup Assessment v1/v2.");
+        return;
+      }
+
+      // Đọc lại sau await để không dùng closure/snapshot trước khi tab khác vừa ghi.
+      const liveAttemptValues = readLiveAttemptSnapshot();
+      const liveDraftSnapshot = readLiveDraftSnapshot();
+      if (!liveAttemptValues || !liveDraftSnapshot) {
+        setTransferMessage(
+          "Không thể hợp nhất: một kho local live không hydrate an toàn. Dữ liệu cũ và file nhập đều được giữ nguyên.",
+        );
+        return;
+      }
+
+      const incomingAttemptValues: unknown[] = [];
+      const incomingAttemptSeen = new Set<string>();
+      let rejectedAttempts = 0;
+      let duplicateAttempts = 0;
+      for (const candidate of envelope.attempts) {
+        const identity = assessmentAttemptIdentity(candidate, entryById);
+        if (identity === null) {
+          rejectedAttempts += 1;
+          continue;
+        }
+        if (incomingAttemptSeen.has(identity)) {
+          duplicateAttempts += 1;
+          continue;
+        }
+        incomingAttemptSeen.add(identity);
+        incomingAttemptValues.push(candidate);
+      }
+
+      let attemptsStatus: ReturnType<typeof writeJson> = "ok";
+      let persistedKnownAttempts: StoredAttempt[] = [];
+      let persistedOpaqueAttempts = 0;
+      if (incomingAttemptValues.length > 0) {
+        const merged = mergeAssessmentAttemptStoreValues(
+          liveAttemptValues,
+          incomingAttemptValues,
+          (candidate) => assessmentAttemptIdentity(candidate, entryById),
+        );
+        if (!merged) {
+          attemptsStatus = "failed";
+          rejectedAttempts += incomingAttemptValues.length;
+        } else {
+          duplicateAttempts += incomingAttemptValues.length - merged.added.length;
+          const mergedPartition = partitionAssessmentAttempts(merged.value, entryById);
+          const payload = [...mergedPartition.known, ...mergedPartition.opaque];
+          if (!isAssessmentAttemptsStoreValueSafe(payload)) {
+            attemptsStatus = "failed";
+          } else if (merged.added.length > 0) {
+            attemptsStatus = writeJson(STORAGE_KEY, payload);
+            if (attemptsStatus === "ok") {
+              attemptsRef.current = mergedPartition.known;
+              unreadableRef.current = mergedPartition.opaque;
+              setAttempts(mergedPartition.known);
+              persistedKnownAttempts = merged.added.filter(
+                (candidate): candidate is StoredAttempt =>
+                  isStoredAttempt(candidate, entryById),
+              );
+              persistedOpaqueAttempts = merged.added.length - persistedKnownAttempts.length;
+            }
+          }
+        }
+      }
+
+      // Chỉ pass mới, không trùng, và đã ghi thành công mới được nối sang Lộ trình.
+      let progressSyncFailures = 0;
+      if (attemptsStatus === "ok") {
+        const passedImportedSessions = new Set(
+          persistedKnownAttempts
+            .filter((attempt) => attempt.status === "passed")
+            .map((attempt) => attempt.sessionId),
+        );
+        for (const sessionId of passedImportedSessions) {
+          const progressResult = markSessionCompleted(sessionId);
+          if (progressResult.status !== "ok") progressSyncFailures += 1;
+        }
+      }
+
+      let nextDraftPayload = {
+        version: 1 as const,
+        drafts: liveDraftSnapshot.drafts as Record<string, unknown>,
+      };
+      let importedDrafts = 0;
+      let replacedEmptyDrafts = 0;
+      let importedOpaqueDrafts = 0;
+      let rejectedDrafts = 0;
+      let duplicateDrafts = 0;
+      let selectedDraftChanged = false;
+
+      if (envelope.drafts) {
+        for (const [sessionId, candidate] of Object.entries(envelope.drafts)) {
+          const entry = entryBySession.get(sessionId);
+          const hasLocal = Object.hasOwn(nextDraftPayload.drafts, sessionId);
+          if (entry) {
+            const validDraft = parseAssessmentDraft(candidate, entry);
+            if (!validDraft) {
+              rejectedDrafts += 1;
+              continue;
+            }
+            const localCandidate = hasLocal ? nextDraftPayload.drafts[sessionId] : undefined;
+            if (hasLocal && !shouldAcceptImportedAssessmentDraft(localCandidate, validDraft)) {
+              duplicateDrafts += 1;
+              continue;
+            }
+            const merged = mergeAssessmentDraftStoreDelta(nextDraftPayload.drafts, {
+              sessionId,
+              kind: "replace",
+              value: validDraft,
+            });
+            if (!merged) {
+              rejectedDrafts += 1;
+              continue;
+            }
+            nextDraftPayload = merged;
+            importedDrafts += 1;
+            if (hasLocal) replacedEmptyDrafts += 1;
+            if (sessionId === selected.sessionId) selectedDraftChanged = true;
+            continue;
+          }
+
+          if (hasLocal) {
+            duplicateDrafts += 1;
+            continue;
+          }
+          const merged = mergeAssessmentDraftStoreDelta(nextDraftPayload.drafts, {
+            sessionId,
+            kind: "replace",
+            value: candidate,
+          });
+          if (!merged) {
+            rejectedDrafts += 1;
+            continue;
+          }
+          nextDraftPayload = merged;
+          importedOpaqueDrafts += 1;
+        }
+      }
+
+      const draftAdditions = importedDrafts + importedOpaqueDrafts;
+      let draftsStatus: ReturnType<typeof writeJson> = "ok";
+      if (draftAdditions > 0) {
+        draftsStatus = writeJson(DRAFTS_STORAGE_KEY, nextDraftPayload);
+        if (draftsStatus === "ok") {
+          const partition = partitionAssessmentDraftStore<AssessmentDraft>(
+            nextDraftPayload.drafts,
+            (sessionId, candidate) => {
+              const entry = entryBySession.get(sessionId);
+              if (!entry) return { kind: "unknown" };
+              const validDraft = parseAssessmentDraft(candidate, entry);
+              return validDraft
+                ? { kind: "known", value: validDraft }
+                : { kind: "invalid" };
+            },
+          );
+          if (partition.status === "invalid-known") {
+            draftsStatus = "failed";
+            lockDraftStore(DRAFT_LIVE_INVALID_MESSAGE);
+          } else {
+            draftsRef.current = partition.known;
+            opaqueDraftsRef.current = partition.opaque;
+            setDraftBlocked(false);
+            if (selectedDraftChanged) {
+              setDraft(partition.known[selected.sessionId] ?? emptyDraft(selected));
+            }
+          }
+        }
+      }
+
+      const persistedAttempts =
+        attemptsStatus === "ok"
+          ? persistedKnownAttempts.length + persistedOpaqueAttempts
+          : 0;
+      const persistedDrafts = draftsStatus === "ok" ? draftAdditions : 0;
+      const failures: string[] = [];
+      if (attemptsStatus !== "ok") {
+        failures.push(
+          `attempt chưa được lưu: ${describeWriteStatus(attemptsStatus) ?? "lỗi bộ nhớ"}`,
+        );
+      }
+      if (draftsStatus !== "ok") {
+        failures.push(
+          `bản nháp chưa được lưu: ${describeWriteStatus(draftsStatus) ?? "lỗi bộ nhớ"}`,
+        );
+      }
+
+      let message: string;
+      if (failures.length > 0) {
+        message =
+          `Khôi phục chưa hoàn tất; đã lưu ${persistedAttempts} attempt và ${persistedDrafts} bản nháp. ` +
+          failures.join("; ");
+      } else if (persistedAttempts + persistedDrafts === 0) {
+        message = "Không có dữ liệu mới để hợp nhất.";
+      } else {
+        message =
+          `Đã hợp nhất ${persistedKnownAttempts.length} attempt nhận diện được, ` +
+          `${importedDrafts} bản nháp hiện hành; giữ nguyên ${persistedOpaqueAttempts} attempt ` +
+          `và ${importedOpaqueDrafts} bản nháp archived ở dạng chưa nhận diện.`;
+      }
+      if (replacedEmptyDrafts > 0 && draftsStatus === "ok") {
+        message += ` Đã khôi phục ${replacedEmptyDrafts} bản nháp thật thay cho form rỗng tự tạo.`;
+      }
+      const ignoredCount =
+        rejectedAttempts + duplicateAttempts + rejectedDrafts + duplicateDrafts;
+      if (ignoredCount > 0) {
+        message += ` Bỏ qua ${ignoredCount} mục hỏng, xung đột hoặc đã có.`;
+      }
+      if (progressSyncFailures > 0) {
+        message +=
+          ` Cảnh báo: ${progressSyncFailures} phiên pass đã lưu nhưng chưa đồng bộ sang tiến độ Lộ trình.`;
+      }
+      setTransferMessage(message);
+    } catch {
+      setTransferMessage("Không đọc được file backup. Dữ liệu hiện tại vẫn được giữ nguyên.");
+    } finally {
+      importInFlightRef.current = false;
+      setIsImporting(false);
+      input.value = "";
+    }
+  }
   return (
-    <section className="assessment-app" aria-label="Hệ thống assessment 290 phiên">
+    <section
+      className="assessment-app"
+      aria-label="Hệ thống assessment 290 phiên"
+      aria-busy={isImporting || undefined}
+    >
       <div className="assessment-overview">
         <div>
           <span>NGÂN HÀNG ĐÁNH GIÁ</span>
@@ -595,10 +1460,55 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
           <span>ATTEMPT TRÊN THIẾT BỊ</span>
           <strong>{attempts.length}</strong>
         </div>
-        <button type="button" onClick={exportAttempts} disabled={attempts.length === 0}>
-          Xuất attempts JSON
+        <button type="button" onClick={exportAttempts} disabled={interactionLocks.exportLocked}>
+          Xuất attempts JSON (kèm bản nháp)
         </button>
+        <button
+          type="button"
+          onClick={() => importInputRef.current?.click()}
+          aria-controls="assessment-import-input"
+          disabled={isImporting}
+        >
+          Nhập &amp; hợp nhất JSON
+        </button>
+        <input
+          ref={importInputRef}
+          id="assessment-import-input"
+          type="file"
+          accept=".json,application/json"
+          hidden
+          disabled={isImporting}
+          onChange={importBackup}
+        />
       </div>
+      {transferMessage && (
+        <p
+          className="save-message"
+          id="assessment-transfer-message"
+          role="status"
+          aria-live="polite"
+        >
+          {transferMessage}
+        </p>
+      )}
+      {(attemptStoreLocked || draftStoreLocked) && (
+        <p className="storage-notice" role="alert" aria-live="assertive">
+          Dữ liệu Assessment hiện có không đọc được hoặc vượt giới hạn. Trang đã khóa ghi
+          {attemptStoreLocked && draftStoreLocked
+            ? " lịch sử attempt và bản nháp"
+            : attemptStoreLocked
+              ? " lịch sử attempt"
+              : " bản nháp"}
+          {" "}để không ghi đè dữ liệu cũ. Dữ liệu local cũ vẫn còn nguyên, nhưng trang không
+          thể xuất backup chuẩn cho đến khi kho này được xử lý. Hãy giữ nguyên dữ liệu trình duyệt
+          và dùng backup gần nhất.
+        </p>
+      )}
+      {draftWriteLimitMessage && (
+        <p className="storage-notice" role="alert" aria-live="assertive">
+          {draftWriteLimitMessage}
+        </p>
+      )}
 
       <div className="assessment-shell">
         <aside className="assessment-catalog" aria-label="Danh sách assessment">
@@ -648,6 +1558,7 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                   data-assessment-item={entry.sessionId}
                   className={active ? "active" : ""}
                   aria-current={active ? "true" : undefined}
+                  disabled={isImporting}
                   onClick={() => chooseAssessment(entry)}
                 >
                   <span>
@@ -741,7 +1652,12 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                 </div>
               </section>
 
-              <form className="assessment-form" onSubmit={saveAttempt}>
+              <form
+                className="assessment-form"
+                onSubmit={saveAttempt}
+                inert={interactionLocks.formLocked}
+                aria-busy={interactionLocks.formLocked}
+              >
                 <section>
                   <div className="form-section-title">
                     <span>01</span>
@@ -758,6 +1674,7 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                         </span>
                         <textarea
                           required
+                          maxLength={MAX_OPAQUE_STRING_LENGTH}
                           value={draft.retrievalAnswers[index] ?? ""}
                           onChange={(event) => updateRetrieval(index, event.target.value)}
                           rows={4}
@@ -782,9 +1699,13 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                     <textarea
                       required
                       rows={8}
+                      maxLength={MAX_OPAQUE_STRING_LENGTH}
                       value={draft.codeEvidence}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, codeEvidence: event.target.value }))
+                        applyDraftUpdate({
+                          ...draft,
+                          codeEvidence: capAssessmentString(event.target.value),
+                        })
                       }
                       placeholder="File/hàm đã viết, lệnh chạy, test đã tạo và kết quả…"
                     />
@@ -793,9 +1714,13 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                     <span>Link notebook/repository/commit (không bắt buộc)</span>
                     <input
                       type="url"
+                      maxLength={MAX_OPAQUE_STRING_LENGTH}
                       value={draft.evidenceLink}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, evidenceLink: event.target.value }))
+                        applyDraftUpdate({
+                          ...draft,
+                          evidenceLink: capAssessmentString(event.target.value),
+                        })
                       }
                       placeholder="https://…"
                     />
@@ -815,9 +1740,13 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                     <textarea
                       required
                       rows={8}
+                      maxLength={MAX_OPAQUE_STRING_LENGTH}
                       value={draft.explanation}
                       onChange={(event) =>
-                        setDraft((current) => ({ ...current, explanation: event.target.value }))
+                        applyDraftUpdate({
+                          ...draft,
+                          explanation: capAssessmentString(event.target.value),
+                        })
                       }
                       placeholder="Data flow/shape, lý do, test biên, chi phí và failure mode…"
                     />
@@ -870,10 +1799,10 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                         required
                         checked={draft.soloConfirmed}
                         onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
+                          applyDraftUpdate({
+                            ...draft,
                             soloConfirmed: event.target.checked,
-                          }))
+                          })
                         }
                       />
                       <span>Tôi đã tự làm phần cốt lõi theo SOLO-90; AI chỉ kiểm tra/gợi mở.</span>
@@ -884,10 +1813,10 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                         required
                         checked={draft.noAutomaticFailConfirmed}
                         onChange={(event) =>
-                          setDraft((current) => ({
-                            ...current,
+                          applyDraftUpdate({
+                            ...draft,
                             noAutomaticFailConfirmed: event.target.checked,
-                          }))
+                          })
                         }
                       />
                       <span>Tôi đã rà các điều kiện tự động trượt và chưa phát hiện vi phạm.</span>
@@ -935,7 +1864,9 @@ export function AssessmentExplorer({ catalog, initialDetail }: Props) {
                         </small>
                       )}
                     </div>
-                    <button type="submit">Lưu attempt trên thiết bị</button>
+                    <button type="submit" disabled={isImporting}>
+                      {isImporting ? "Đang nhập backup…" : "Lưu attempt trên thiết bị"}
+                    </button>
                   </div>
                   {draftNotice && (
                     <p className="storage-notice" role="status">

@@ -5,6 +5,11 @@ import { InternalLink } from "./InternalLink";
 import { sitePath } from "../lib/site-path";
 import { readJson, writeJson } from "../lib/local-storage";
 import { useDraftWriter } from "../lib/draft-storage";
+import {
+  describeLearningProgressWriteResult,
+  markSessionCompleted,
+  mergeLearningProgress,
+} from "../lib/learning-progress";
 
 type TestCase = { name: string; code: string };
 type Exercise = {
@@ -57,6 +62,15 @@ const exercises: Exercise[] = [
   },
 ];
 
+/** Mỗi bài Arena xác nhận đúng phiên thực hành tương ứng trong lộ trình. */
+const ROADMAP_SESSION_BY_EXERCISE: Readonly<Record<string,string>>={
+  "vector-mean":"w01-lesson-3",
+  "linear-predict":"w05-lesson-1",
+  "knn-vote":"w08-lesson-2",
+  "binary-metrics":"w06-lesson-3",
+  "conv-valid":"w23-lesson-2",
+};
+
 type RunResult = { ok: boolean; output: string[]; details?: {name:string;passed:boolean;blind?:boolean;category?:string}[]; error?: string };
 
 /**
@@ -69,6 +83,29 @@ const BOOT_TIMEOUT_MS = 60_000;
 
 /** Kho bản nháp code của Code Arena, tách theo từng bài. */
 const ARENA_DRAFTS_KEY="voai-arena-drafts-v1";
+const LEGACY_ARENA_PROGRESS_KEY="voai-progress";
+
+/**
+ * Chỉ nhận đúng dấu vết pass do Code Arena phiên bản cũ ghi ra. Timestamp phải
+ * là ISO thật; object thêm/thiếu trường hoặc `solo` khác true đều bị bỏ qua.
+ */
+function isLegacyArenaPass(value:unknown):boolean{
+  if(typeof value!=="object"||value===null||Array.isArray(value)) return false;
+  const record=value as Record<string,unknown>;
+  if(Object.keys(record).length!==2||record.solo!==true||typeof record.passedAt!=="string") return false;
+  const timestamp=Date.parse(record.passedAt);
+  return Number.isFinite(timestamp)&&new Date(timestamp).toISOString()===record.passedAt;
+}
+
+export function legacyArenaPassedSessionIds(value:unknown):string[]{
+  if(typeof value!=="object"||value===null||Array.isArray(value)) return [];
+  const records=value as Record<string,unknown>;
+  const sessionIds:string[]=[];
+  for(const [exerciseId,sessionId] of Object.entries(ROADMAP_SESSION_BY_EXERCISE)){
+    if(isLegacyArenaPass(records[exerciseId])) sessionIds.push(sessionId);
+  }
+  return sessionIds;
+}
 
 /** Đọc kho nháp; dữ liệu hỏng trả về rỗng chứ không ném. */
 function readArenaDrafts():Record<string,string>{
@@ -91,6 +128,7 @@ export function CodePractice() {
   const [mode,setMode]=useState<"visible"|"blind">("visible");
   const [status,setStatus]=useState<"idle"|"loading"|"running">("idle");
   const [result,setResult]=useState<RunResult|null>(null);
+  const [progressNotice,setProgressNotice]=useState<string|null>(null);
   const workerRef=useRef<Worker|null>(null);
   const timeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
   const bootTimeoutRef=useRef<ReturnType<typeof setTimeout>|null>(null);
@@ -114,6 +152,24 @@ export function CodePractice() {
     return ()=>window.clearTimeout(timer);
   },[]);
 
+  // PROGRESS-MIGRATION-ARENA-START
+  // Nối các lần pass hợp lệ từ kho `voai-progress` cũ sang kho canonical.
+  // Không xoá/ghi lại kho cũ để người học vẫn có đường lui khi hạ phiên bản.
+  useEffect(()=>{
+    const timer=window.setTimeout(()=>{
+      const legacyRecords=readJson<unknown>(LEGACY_ARENA_PROGRESS_KEY,value=>value,{});
+      const passedSessionIds=legacyArenaPassedSessionIds(legacyRecords);
+      if(passedSessionIds.length===0) return;
+      const progressResult=mergeLearningProgress(passedSessionIds);
+      const warning=describeLearningProgressWriteResult(progressResult);
+      if(warning){
+        setProgressNotice(`Đã tìm thấy bài Code Arena đạt từ phiên bản cũ, nhưng tiến độ Lộ trình chưa được lưu. ${warning}`);
+      }
+    },0);
+    return ()=>window.clearTimeout(timer);
+  },[]);
+  // PROGRESS-MIGRATION-ARENA-END
+
   /**
    * Ghi nháp của bài hiện tại; giữ nguyên nháp của các bài khác.
    *
@@ -136,6 +192,7 @@ export function CodePractice() {
     setExerciseId(id);
     setCode(draftsRef.current[id] ?? next.starter);
     setResult(null); setMode("visible");
+    setProgressNotice(null);
   };
 
   /** Xoá về starter — thao tác phá huỷ nên phải hỏi trước. */
@@ -150,6 +207,7 @@ export function CodePractice() {
 
   const run=()=>{
     setResult(null);
+    setProgressNotice(null);
     if(timeoutRef.current)clearTimeout(timeoutRef.current);
     workerRef.current?.terminate();
     if(bootTimeoutRef.current)clearTimeout(bootTimeoutRef.current);
@@ -194,6 +252,12 @@ export function CodePractice() {
       if(timeoutRef.current) clearTimeout(timeoutRef.current);
       disposeWorker();setStatus("idle");setResult(event.data);
       if(runMode==="blind"&&event.data.details?.every((item:{passed:boolean})=>item.passed)){
+        const roadmapSessionId=ROADMAP_SESSION_BY_EXERCISE[runExerciseId];
+        if(roadmapSessionId){
+          const progressResult=markSessionCompleted(roadmapSessionId);
+          const warning=describeLearningProgressWriteResult(progressResult);
+          if(warning) setProgressNotice(`Bài code vẫn đạt toàn bộ test mù, nhưng tiến độ Lộ trình chưa được lưu. ${warning}`);
+        }
         const current=readJson<Record<string,unknown>>("voai-progress",value=>(typeof value==="object"&&value!==null&&!Array.isArray(value)?value as Record<string,unknown>:null),{});
         current[runExerciseId]={passedAt:new Date().toISOString(),solo:true};
         writeJson("voai-progress",current);
@@ -228,6 +292,7 @@ export function CodePractice() {
         <div className="editor-pane">
           <div className="editor-toolbar"><div><button className={mode==="visible"?"active":""} onClick={()=>{setMode("visible");setResult(null)}} disabled={status!=="idle"}>Test công khai</button><button className={mode==="blind"?"active":""} onClick={()=>{setMode("blind");setResult(null)}} disabled={status!=="idle"}>Nộp kiểm tra mù</button></div><button className="reset-code" onClick={resetCode} disabled={status!=="idle"}>Khôi phục</button></div>
           {draftWriter.notice?<p className="storage-notice" role="status">{draftWriter.notice} Hãy sao chép code ra nơi khác trước khi rời trang.</p>:null}
+          {progressNotice?<p className="storage-notice" role="status" aria-live="polite">{progressNotice}</p>:null}
           <p className="hidden-note">Kiểm tra mù chỉ giấu ca kiểm tra khỏi giao diện trước khi chạy. Nội dung vẫn nằm trong mã phía client và có thể xem qua source/bundle; đây là công cụ luyện tập, không phải cơ chế bảo mật.</p>
           <div className="code-editor"><div className="line-numbers">{lines.map(line=><span key={line}>{line}</span>)}</div><textarea spellCheck={false} value={code} onChange={e=>updateCode(e.target.value)} aria-label="Trình soạn thảo mã Python" disabled={status!=="idle"}/></div>
           <div className="runbar" aria-live="polite"><span>{status==="loading"?"Đang tải Python (~10 MB); chưa tính thời gian chạy…":status==="running"?"Đang chạy trong Web Worker…":"Python 3 · Web Worker · mã chạy tối đa 8 giây"}</span><button onClick={run} disabled={status!=="idle"}>{mode==="blind"?"Nộp bài":"Chạy test"} <b>▶</b></button></div>

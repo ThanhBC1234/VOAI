@@ -81,7 +81,10 @@ test("roadmap and lesson evidence match the requested scope", async () => {
     "payload đầu phải chỉ mang lý thuyết của bài đầu",
   );
   assert.equal((lessons.match(/openingQuestions/g) ?? []).length, 1);
-  assert.match(lessonExplorerSource, /loadLessonTheoryDetails\(lessonId\)/);
+  assert.match(lessons, /Chia dữ liệu khách hàng mà lần chạy nào cũng kiểm chứng được/);
+  assert.match(lessons, /deterministic_split\.py/);
+  assert.doesNotMatch(lessons, /Chuẩn hóa một batch ảnh camera theo từng kênh màu/);
+  assert.match(lessonExplorerSource, /loadLessonDetails\(lessonId\)/);
   assert.doesNotMatch(lessonExplorerSource, /lesson\.deepTheory/);
 
   assert.match(lessonExplorerSource, /new URLSearchParams\(window\.location\.search\)\.get\("lesson"\)/);
@@ -166,7 +169,7 @@ test("assessment bank renders all 290 records and defers static deep-link select
   assert.match(explorerSource, /setSelectedId\(target\.sessionId\)/);
   // ASSESS-P2-01/02: nháp giữ theo sessionId, loader không được ghi đè storage.
   assert.match(explorerSource, /DRAFTS_STORAGE_KEY/);
-  assert.match(explorerSource, /draftsRef\.current\[entry\.sessionId\] \?\? emptyDraft\(entry\)/);
+  assert.match(explorerSource, /setDraft\(live\?\.known\[entry\.sessionId\] \?\? emptyDraft\(entry\)\)/);
   assert.match(explorerSource, /unreadableRef/);
   assert.match(explorerSource, /rubricSnapshot/);
   assert.doesNotMatch(
@@ -290,10 +293,12 @@ test("every screen that holds learner work routes writes through the safe layer"
     );
   }
 
-  // Hai màn hình có ô gõ tự do phải gộp nhịp ghi thay vì ghi từng ký tự.
-  for (const [name, source] of [["CodePractice", arena], ["AssessmentExplorer", assessments]]) {
-    assert.match(source, /useDraftWriter/, `${name} phải dùng useDraftWriter cho bản nháp`);
-  }
+  // Mọi màn hình có ô gõ tự do phải debounce; các kho có thể mở nhiều tab còn
+  // phải merge delta vào snapshot live thay vì ghi đè bằng React state cũ.
+  assert.match(arena, /useDraftWriter/, "CodePractice phải debounce bản nháp");
+  assert.match(assessments, /createAssessmentDraftDeltaWriterCore/);
+  assert.match(assessments, /mergeAssessmentDraftStoreDelta/);
+  assert.match(theory, /mergeTheoryPracticeDelta/);
 
   // Lịch sử thi phải đi qua cửa kiểm định, nếu không một bản ghi hỏng là trắng trang.
   assert.match(theory, /parseStoredAttempt/);
