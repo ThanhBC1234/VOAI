@@ -54,6 +54,7 @@ __pycache__/
 # chạy scripts/run-vinext.mjs. Commit chúng sẽ tạo hai nguồn sự thật.
 /public/data/assessments/
 /public/data/coach/
+/public/data/lesson-theory/
 
 # Tệp khoá tạm của Microsoft Office, sinh ra khi mở .docx/.xlsx và biến mất khi
 # đóng. Chúng đã từng lọt vào một commit.

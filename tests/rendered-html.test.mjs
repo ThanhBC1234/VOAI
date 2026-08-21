@@ -75,6 +75,15 @@ test("roadmap and lesson evidence match the requested scope", async () => {
   assert.match(roadmap, /href="\/lessons\?lesson=foundation-python"/);
   assert.match(lessons, /78\/78 bài/);
   assert.doesNotMatch(lessons, /hiddenTestIdeas/i);
+  assert.equal(
+    (lessons.match(/readingMinutes/g) ?? []).length,
+    1,
+    "payload đầu phải chỉ mang lý thuyết của bài đầu",
+  );
+  assert.equal((lessons.match(/openingQuestions/g) ?? []).length, 1);
+  assert.match(lessonExplorerSource, /loadLessonTheoryDetails\(lessonId\)/);
+  assert.doesNotMatch(lessonExplorerSource, /lesson\.deepTheory/);
+
   assert.match(lessonExplorerSource, /new URLSearchParams\(window\.location\.search\)\.get\("lesson"\)/);
 });
 

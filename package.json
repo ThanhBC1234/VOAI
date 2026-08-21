@@ -10,7 +10,7 @@
     "build": "node scripts/run-vinext.mjs build",
     "build:pages": "node scripts/run-vinext.mjs pages",
     "start": "node scripts/run-vinext.mjs start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/theory-exam-state.test.mjs tests/theory-content.test.mjs tests/local-storage.test.mjs tests/draft-storage.test.mjs tests/assessment-chunks.test.mjs tests/math-content.test.mjs tests/theme-tokens.test.mjs tests/coach-search.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/theory-exam-state.test.mjs tests/theory-content.test.mjs tests/lesson-theory-content.test.mjs tests/lesson-theory-chunks.test.mjs tests/local-storage.test.mjs tests/draft-storage.test.mjs tests/assessment-chunks.test.mjs tests/math-content.test.mjs tests/theme-tokens.test.mjs tests/coach-search.test.mjs",
     "test:pages": "node --test tests/pages-export.test.mjs",
     "measure:payload": "node scripts/measure-payload.mjs",
     "typecheck": "tsc --noEmit",

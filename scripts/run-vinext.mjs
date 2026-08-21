@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { emitAssessmentChunks } from "./emit-assessment-chunks.mjs";
 import { emitCoachIndex } from "./emit-coach-index.mjs";
+import { emitLessonTheoryChunks } from "./emit-lesson-theory-chunks.mjs";
 import { BASE_PATH } from "../site.config.mjs";
 
 const requestedMode = process.argv[2];
@@ -19,6 +20,14 @@ const chunkResult = await emitAssessmentChunks();
 console.log(
   `[voai] ${chunkResult.chunks} chunk assessment · ${(chunkResult.bytes / 1024).toFixed(1)} KB raw`,
 );
+
+// Lý thuyết mở rộng cũng được tách khỏi payload đầu và sinh lại cho mọi chế
+// độ, giống assessment chunks. Mỗi bài là một JSON tĩnh có version riêng.
+const lessonTheoryResult = await emitLessonTheoryChunks();
+console.log(
+  `[voai] ${lessonTheoryResult.count} chunk lý thuyết · ${(lessonTheoryResult.bytes / 1024).toFixed(1)} KB raw`,
+);
+
 
 // Cùng lý do: chỉ mục trợ giảng cũng là tài sản sinh ra từ nội dung, nên phải
 // được sinh lại ở mọi chế độ. Thiếu nó thì trợ giảng im lặng trả lời "không có

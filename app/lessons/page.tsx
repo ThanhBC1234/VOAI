@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LessonsExplorer, type LessonViewModel } from "../../components/LessonsExplorer";
 import { getCoreLessonsInRecommendedOrder } from "../../content/lessons-core";
 import { multimodalLessons } from "../../content/lessons-multimodal";
+import { assertLessonTheoryCoverage, getLessonDeepTheory } from "../../content/lesson-theory";
 
 export const metadata: Metadata = {
   title: "78 bài giảng thuật toán — VOAI Lab",
@@ -37,5 +38,7 @@ function modalView(lesson: (typeof multimodalLessons)[number]): LessonViewModel 
 
 export default function LessonsPage() {
   const lessons=[...getCoreLessonsInRecommendedOrder().map(coreView),...multimodalLessons.map(modalView)];
-  return <main className="inner-page"><header className="page-hero compact"><p className="eyebrow">CATALOG IOAI 2026</p><h1>{lessons.length} bài giảng.<br/><em>Tự làm phần tạo ra hiểu biết.</em></h1><p>Mỗi bài đi qua trực giác, công thức, trace, độ phức tạp, failure modes, quiz và một dự án thật. Với thuật toán nhỏ, bạn tự cài phần lõi; với model pretrained lớn, bạn tự viết pipeline, evaluation, kiểm tra shape/schema, error analysis và ít nhất một ablation — không phải huấn luyện lại toàn bộ model từ đầu.</p></header><LessonsExplorer lessons={lessons}/></main>;
+  assertLessonTheoryCoverage(lessons.map((lesson)=>lesson.id));
+  const initialTheory=getLessonDeepTheory(lessons[0].id);
+  return <main className="inner-page"><header className="page-hero compact"><p className="eyebrow">CATALOG IOAI 2026</p><h1>{lessons.length} bài giảng.<br/><em>Tự làm phần tạo ra hiểu biết.</em></h1><p>Mỗi bài đi qua trực giác, công thức, trace, độ phức tạp, failure modes, quiz và một dự án thật. Với thuật toán nhỏ, bạn tự cài phần lõi; với model pretrained lớn, bạn tự viết pipeline, evaluation, kiểm tra shape/schema, error analysis và ít nhất một ablation — không phải huấn luyện lại toàn bộ model từ đầu.</p></header><LessonsExplorer lessons={lessons} initialTheory={initialTheory}/></main>;
 }

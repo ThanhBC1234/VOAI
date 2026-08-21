@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { measureRoute } from "../scripts/measure-payload.mjs";
 import { BASE_PATH, REPOSITORY_NAME } from "../site.config.mjs";
 
 const artifactRoot = path.resolve("dist", "client");
@@ -177,6 +178,51 @@ test("Pages export ships every assessment detail chunk the catalog points at", a
     `/assessments HTML nặng ${assessments.length} byte — chi tiết có thể đã quay lại payload đầu`,
   );
   assert.equal((assessments.match(/data-assessment-item=/g) ?? []).length, 290);
+});
+
+test("Pages export ships exactly one safe theory chunk for every lesson", async () => {
+  const chunkDirectory = path.join(artifactRoot, "data", "lesson-theory");
+  assert.ok(await exists(chunkDirectory), "Missing data/lesson-theory in Pages export");
+
+  const files = (await readdir(chunkDirectory)).filter((name) => name.endsWith(".json"));
+  assert.equal(files.length, 78, `Found ${files.length} theory chunks instead of 78`);
+
+  const lessonIds = new Set();
+  for (const file of files) {
+    assert.match(
+      file,
+      /^[a-z0-9]+(?:-[a-z0-9]+)*\.json$/,
+      `Unsafe theory chunk filename: ${file}`,
+    );
+    const lessonId = file.slice(0, -".json".length);
+    assert.equal(lessonIds.has(lessonId), false, `Duplicate theory chunk for ${lessonId}`);
+    lessonIds.add(lessonId);
+
+    const chunk = JSON.parse(await readFile(path.join(chunkDirectory, file), "utf8"));
+    assert.equal(chunk.version, 1, `${file} has an unsupported envelope version`);
+    assert.equal(chunk.lessonId, lessonId, `${file} lessonId does not match its filename`);
+    assert.ok(
+      chunk.theory && typeof chunk.theory === "object" && !Array.isArray(chunk.theory),
+      `${file} has no theory object`,
+    );
+    assert.equal(
+      chunk.theory.lessonId,
+      lessonId,
+      `${file} theory.lessonId does not match its filename`,
+    );
+  }
+  assert.equal(lessonIds.size, 78, "Theory chunks do not cover 78 unique lesson IDs");
+});
+
+test("lessons initial payload stays within the release budget", async () => {
+  const measurement = await measureRoute("lessons");
+
+  assert.ok(measurement.html.raw < 550_000, `/lessons HTML raw is ${measurement.html.raw} bytes`);
+  assert.ok(measurement.rsc.raw < 500_000, `/lessons RSC raw is ${measurement.rsc.raw} bytes`);
+  assert.ok(measurement.javascript.gzip < 250 * 1024, `/lessons JS gzip is ${measurement.javascript.gzip} bytes`);
+  assert.ok(measurement.total.raw < 2 * 1024 * 1024, `/lessons total raw is ${measurement.total.raw} bytes`);
+  assert.ok(measurement.total.gzip < 600 * 1024, `/lessons total gzip is ${measurement.total.gzip} bytes`);
+  assert.ok(measurement.total.brotli < 500 * 1024, `/lessons total brotli is ${measurement.total.brotli} bytes`);
 });
 
 test("Pages metadata, assessment links, and browser worker retain the repository base path", async () => {
